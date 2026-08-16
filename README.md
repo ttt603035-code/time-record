@@ -139,29 +139,43 @@ The current version is fully local and needs **no backend**. The architecture
 - **+** — add an event (StudyHub-style popup with iOS-style date & time wheels)
 - Tap an event — edit or delete (StudyHub-style popup + Apple confirmation dialog)
 - **Calendar / Today / Insights / More** — floating capsule tabs
-- **Insights** — 日/周/月/年 analytics, derived automatically from your events
+- **Insights** — Day/Week/Month/Year time analytics with donut → Category → Task → Session drill-down, all derived automatically from your events
 - **More → Data** — export JSON, import JSON, clear all data + live storage-key list
 - **More → Event Templates** — add / edit / delete your categories (they feed the event form)
 - **More → Language** — English / 中文 interface switch (persisted)
 
-## Insights (洞悉)
+## Insights (时间分析)
 
-Four segments — **Day / Week / Month / Year** — each with a period picker
-(‹ › arrows plus a tap-to-pick sheet that selects year, month, week or day):
+Calflow-style time analytics, derived **live** from the Time Record — nothing is
+stored separately, no second dataset. Every number on this screen is computed
+from `state.events` at render time, so a new event (manual, or imported by the
+Shortcut) is reflected everywhere immediately.
 
-| View  | Blocks                                                 |
-| ----- | ------------------------------------------------------ |
-| Day   | hourly time-block timeline + category donut            |
-| Week  | category donut + per-weekday time distribution + 7-day event columns |
-| Month | category donut + activity stats + daily trend line + hour distribution |
-| Year  | category donut + monthly trend bars + hour distribution |
+**Four shared ranges — Day / Week / Month / Year** (segments + ‹ › arrows +
+tap-to-pick sheet). The range is global: the hero total, donut, trend, ranking
+and task lists all switch together — no mixed periods.
 
-The donut chart shows the total in its center with the category legend
-beneath it, and segments are separated by gaps so they never blend together.
-All charts read the same `state.events`, so imported data is fully linked —
-nothing needs to be imported per section. Charts are hand-drawn SVG (no
-libraries) and scale to phone width. The Today tab shows the same time-block
-timeline as Insights → Day, including a "now" line.
+Drill-down (Overview → Category → Task → Session):
+
+| Level | What it answers |
+| ----- | --------------- |
+| **Overview** | Total time for the period; interactive donut of time distribution (center = total, tap a segment to cross-filter the trend + task list; tap the selected segment again to enter the Category); trend chart per range (tap a bucket to read its value); Top Tasks ranking |
+| **Category** (`event.category`) | Category total, share of total, sessions, average session; its own trend; a task-level donut (tints of the category color) + task ranking |
+| **Task** (`event.title` within a category) | Total time, sessions, average session, first/last recorded, sessions per week, share-of-total ring, its own trend, and the full session history |
+| **Session** (one Time Record) | Tap any history row to expand Date / Start / End / Duration / Event / Category / note, plus an Edit shortcut into the event form |
+
+- Navigation: dedicated back button, slide animations, iOS-style "tap the
+  active Insights tab again to return to the overview".
+- All charts are hand-drawn SVG (no libraries), tap-target-first for iPhone,
+  and every segment/row is a real button (keyboard accessible).
+- The Day overview keeps the time-block timeline (shared with the Today tab);
+  tapping a block drills straight into that task's analytics.
+- Categories are colored by their Event Template color; unknown categories fall
+  back to their event color; uncategorized time is shown in neutral gray.
+- Session definition: one event = one session; duration = end − start.
+
+The hierarchy uses the existing record fields — `category` → `title` →
+individual records — no invented grouping, no duplicated statistics.
 
 ## Importing from Shortcuts
 

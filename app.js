@@ -87,12 +87,14 @@ const I18N = {
     importGuide: 'Import from Shortcuts',
     importGuideDesc: 'Have your Shortcut build this JSON, save it as a file, then tap Import.',
     importGuideNote: 'Later, a backend (Supabase) will let the Shortcut send events automatically — the data layer is already ready for it.',
-    dayBlocks: 'Time Blocks', dayPie: 'Category Share',
-    timeDistribution: 'Time Distribution', weekBlocks: 'Week Blocks', dailyHours: 'Daily Hours',
-    activity: 'Activity', activeTrend: 'Activity Trend',
-    totalEvents: 'Total Events', activeDays: 'Active Days', totalHours: 'Total Hours', busiestDay: 'Busiest Day',
-    noData: 'No data for this period', hoursUnit: 'h',
-    monthTrend: 'Events per day', yearTrend: 'Events per month',
+    dayBlocks: 'Time Blocks', noData: 'No data for this period',
+    totalTime: 'Total Time', timeDistribution: 'Time Distribution', trend: 'Trend', history: 'History',
+    sessionsTile: 'Sessions', avgSession: 'Average Session', avgShort: 'avg',
+    firstRecorded: 'First Recorded', lastRecorded: 'Last Recorded', frequency: 'Frequency',
+    shareOfTotal: 'of total time',
+    topTasks: 'Top Tasks', tasksCount: '%n tasks', viewDetails: 'View Details', allCategories: 'All Categories',
+    noSessions: 'No sessions in this period', back: 'Back',
+    duration: 'Duration', event: 'Event', edit: 'Edit',
   },
   zh: {
     calendar: '日历', today: '今天', insights: '洞悉', more: '更多',
@@ -133,12 +135,14 @@ const I18N = {
     importGuide: '从快捷指令导入',
     importGuideDesc: '让快捷指令生成如下 JSON，保存为文件后点击「导入」。',
     importGuideNote: '后续接入 Supabase 后端后，快捷指令即可自动写入日程 — 数据层已为此做好准备。',
-    dayBlocks: '时间块', dayPie: '分类占比',
-    timeDistribution: '时间分布', weekBlocks: '一周时间块', dailyHours: '每日时长',
-    activity: '活动', activeTrend: '活跃趋势',
-    totalEvents: '总日程', activeDays: '活跃天数', totalHours: '总时长', busiestDay: '最活跃日',
-    noData: '该时段暂无数据', hoursUnit: '小时',
-    monthTrend: '每日日程数', yearTrend: '每月日程数',
+    dayBlocks: '时间块', noData: '该时段暂无数据',
+    totalTime: '总时长', timeDistribution: '时间分布', trend: '趋势', history: '历史记录',
+    sessionsTile: '次数', avgSession: '平均时长', avgShort: '平均',
+    firstRecorded: '首次记录', lastRecorded: '最近记录', frequency: '使用频率',
+    shareOfTotal: '占总时长',
+    topTasks: '任务排行', tasksCount: '%n 个任务', viewDetails: '查看详情', allCategories: '全部分类',
+    noSessions: '该时段暂无记录', back: '返回',
+    duration: '时长', event: '日程', edit: '编辑',
   },
 };
 
@@ -1029,13 +1033,49 @@ function defaultTimes(dateISO) {
 function buildDemoEvents() {
   const t = todayISO();
   const list = [
-    { date: addDaysISO(t, -2), startTime: '20:00', endTime: '20:45', title: 'Weekly Review', category: 'Personal', color: 'pink' },
-    { date: addDaysISO(t, -1), startTime: '10:00', endTime: '11:30', title: '高数练习', category: 'Study', color: 'blue', note: 'Chapter 6 — integrals' },
+    // ── Today ──
     { date: t, startTime: '09:00', endTime: '10:30', title: 'CET-6 Reading', category: 'English', color: 'blue' },
     { date: t, startTime: '14:00', endTime: '15:00', title: '春江花月夜', category: 'Chinese', color: 'purple', note: 'Review poem analysis' },
     { date: t, startTime: '17:00', endTime: '22:00', title: 'Evening Shift', category: 'Work', color: 'orange' },
     { date: addDaysISO(t, 1), startTime: '07:30', endTime: '08:10', title: 'Morning Run', category: 'Health', color: 'green' },
-    { date: addDaysISO(t, 3), startTime: '19:00', endTime: '20:00', title: 'Book Club', category: 'Personal', color: 'purple', note: 'Chapter 4' },
+    // ── Yesterday ──
+    { date: addDaysISO(t, -1), startTime: '08:00', endTime: '08:30', title: 'Vocabulary', category: 'English', color: 'blue' },
+    { date: addDaysISO(t, -1), startTime: '10:00', endTime: '11:30', title: '高数练习', category: 'Study', color: 'blue', note: 'Chapter 6 — integrals' },
+    { date: addDaysISO(t, -1), startTime: '19:00', endTime: '21:00', title: 'Evening Shift', category: 'Work', color: 'orange' },
+    // ── Two days ago ──
+    { date: addDaysISO(t, -2), startTime: '08:00', endTime: '09:00', title: 'CET-6 Reading', category: 'English', color: 'blue' },
+    { date: addDaysISO(t, -2), startTime: '16:00', endTime: '17:00', title: 'Grammar', category: 'English', color: 'blue' },
+    { date: addDaysISO(t, -2), startTime: '20:00', endTime: '20:45', title: 'Weekly Review', category: 'Personal', color: 'pink' },
+    // ── Rest of this week ──
+    { date: addDaysISO(t, -3), startTime: '07:20', endTime: '08:00', title: 'Morning Run', category: 'Health', color: 'green' },
+    { date: addDaysISO(t, -3), startTime: '19:30', endTime: '20:30', title: 'Vocabulary', category: 'English', color: 'blue' },
+    { date: addDaysISO(t, -4), startTime: '09:00', endTime: '11:00', title: '高数练习', category: 'Study', color: 'blue' },
+    { date: addDaysISO(t, -4), startTime: '14:00', endTime: '15:30', title: 'Literature', category: 'Chinese', color: 'purple' },
+    { date: addDaysISO(t, -5), startTime: '08:00', endTime: '08:45', title: 'CET-6 Reading', category: 'English', color: 'blue' },
+    { date: addDaysISO(t, -6), startTime: '10:00', endTime: '11:00', title: 'Writing', category: 'Chinese', color: 'purple' },
+    { date: addDaysISO(t, -6), startTime: '17:00', endTime: '22:00', title: 'Evening Shift', category: 'Work', color: 'orange' },
+    // ── Earlier this month ──
+    { date: addDaysISO(t, -8), startTime: '07:30', endTime: '08:10', title: 'Morning Run', category: 'Health', color: 'green' },
+    { date: addDaysISO(t, -9), startTime: '09:00', endTime: '10:30', title: 'CET-6 Reading', category: 'English', color: 'blue' },
+    { date: addDaysISO(t, -9), startTime: '20:00', endTime: '21:00', title: 'Grammar', category: 'English', color: 'blue' },
+    { date: addDaysISO(t, -11), startTime: '14:00', endTime: '15:30', title: 'Literature', category: 'Chinese', color: 'purple' },
+    { date: addDaysISO(t, -12), startTime: '08:00', endTime: '08:30', title: 'Vocabulary', category: 'English', color: 'blue' },
+    { date: addDaysISO(t, -12), startTime: '19:00', endTime: '21:00', title: 'Evening Shift', category: 'Work', color: 'orange' },
+    { date: addDaysISO(t, -14), startTime: '10:00', endTime: '11:30', title: '高数练习', category: 'Study', color: 'blue' },
+    { date: addDaysISO(t, -15), startTime: '16:00', endTime: '17:00', title: 'Writing', category: 'Chinese', color: 'purple' },
+    { date: addDaysISO(t, -16), startTime: '07:30', endTime: '08:15', title: 'Morning Run', category: 'Health', color: 'green' },
+    // ── Previous month — so the year trend has shape ──
+    { date: addDaysISO(t, -21), startTime: '09:00', endTime: '10:30', title: 'CET-6 Reading', category: 'English', color: 'blue' },
+    { date: addDaysISO(t, -24), startTime: '15:00', endTime: '16:00', title: 'Vocabulary', category: 'English', color: 'blue' },
+    { date: addDaysISO(t, -27), startTime: '10:00', endTime: '11:00', title: '高数练习', category: 'Study', color: 'blue' },
+    { date: addDaysISO(t, -30), startTime: '19:00', endTime: '20:00', title: 'Book Club', category: 'Personal', color: 'purple', note: 'Chapter 4' },
+    { date: addDaysISO(t, -34), startTime: '09:00', endTime: '10:00', title: 'Literature', category: 'Chinese', color: 'purple' },
+    { date: addDaysISO(t, -37), startTime: '08:00', endTime: '08:40', title: 'Vocabulary', category: 'English', color: 'blue' },
+    { date: addDaysISO(t, -40), startTime: '17:00', endTime: '22:00', title: 'Evening Shift', category: 'Work', color: 'orange' },
+    { date: addDaysISO(t, -44), startTime: '09:00', endTime: '10:30', title: 'CET-6 Reading', category: 'English', color: 'blue' },
+    { date: addDaysISO(t, -48), startTime: '07:30', endTime: '08:05', title: 'Morning Run', category: 'Health', color: 'green' },
+    { date: addDaysISO(t, -52), startTime: '14:00', endTime: '15:00', title: 'Grammar', category: 'English', color: 'blue' },
+    { date: addDaysISO(t, -58), startTime: '20:00', endTime: '21:00', title: 'Weekly Review', category: 'Personal', color: 'pink' },
   ];
   return list.map(normalizeEvent);
 }
@@ -2136,11 +2176,19 @@ function confirmDelete(event, sheetApi) {
 }
 
 /* ============================================================
-   19b. INSIGHTS  (日 / 周 / 月 / 年 analytics)
+   19b. ANALYTICS — Calflow-style time analytics
    ------------------------------------------------------------
-   All charts are derived automatically from the same event data
-   (state.events) — imported data is fully linked across every
-   section; nothing needs to be imported per-view.
+   Everything here is DERIVED from state.events at render time.
+   No statistics are stored separately — the Time Record is the
+   single source of truth. Drill-down model:
+
+     Overview  →  Category (event.category)
+               →  Task (event.title within a category)
+               →  Sessions (the events themselves)
+
+   Selecting a donut segment on the Overview cross-filters the
+   trend + task list in place; tapping the selected segment again
+   (or “View Details”) drills into the Category page.
    ============================================================ */
 
 function hexToRgba(hex, a) {
@@ -2157,6 +2205,8 @@ function mondayOf(y, m, d) {
   dt.setDate(dt.getDate() - dow);
   return isoDate(dt.getFullYear(), dt.getMonth(), dt.getDate());
 }
+
+/* ── Range (shared with the period picker below) ── */
 
 function insightsPeriod() {
   const { mode, year, month, day } = insights;
@@ -2215,147 +2265,494 @@ function uncategorizedName() {
   return appLang === 'zh' ? '未分类' : 'Uncategorized';
 }
 
+/* ── Analytics route + selection state ── */
+
+const analytics = {
+  route: { level: 'overview', category: null, task: null },
+  selected: null, // canonical category key highlighted on the Overview
+};
+
+/* ── Time math & formatting (computed only — never stored) ── */
+
+function eventMinutes(e) {
+  return Math.max(0, toMinutes(e.endTime) - toMinutes(e.startTime));
+}
+
+function sumMinutes(events) {
+  return events.reduce((s, e) => s + eventMinutes(e), 0);
+}
+
+function fmtTime(mins) {
+  const h = Math.floor(mins / 60);
+  const m = Math.round(mins % 60);
+  if (appLang === 'zh') {
+    if (h <= 0) return m + ' 分钟';
+    return m > 0 ? h + ' 小时 ' + m + ' 分' : h + ' 小时';
+  }
+  if (h <= 0) return m + 'm';
+  return m > 0 ? h + 'h ' + m + 'm' : h + 'h';
+}
+
+function fmtTimeShort(mins) {
+  if (mins < 60) return appLang === 'zh' ? Math.round(mins) + ' 分钟' : Math.round(mins) + 'm';
+  const v = Math.max(0.1, Math.round(mins / 6) / 10); // hours with 1 decimal
+  const s = v % 1 === 0 ? String(v) : v.toFixed(1);
+  return appLang === 'zh' ? s + ' 小时' : s + 'h';
+}
+
+function pctOf(part, total) {
+  return total > 0 ? Math.round(part / total * 100) : 0;
+}
+
+function shareText(pct) {
+  return appLang === 'zh' ? t('shareOfTotal') + ' ' + pct + '%' : pct + '% ' + t('shareOfTotal');
+}
+
+function sessionsMeta(n) {
+  if (appLang === 'zh') return n + ' 次';
+  return n + (n === 1 ? ' session' : ' sessions');
+}
+
+function activeDaysMeta(n) {
+  if (appLang === 'zh') return n + ' 个活跃日';
+  return n + (n === 1 ? ' active day' : ' active days');
+}
+
+function shortDay(iso) {
+  const { y, m, d } = parseISO(iso);
+  return appLang === 'zh' ? (m + 1) + '月' + d + '日' : MONTHS_SHORT[m] + ' ' + d + ', ' + y;
+}
+
+/* ── Canonical category keys (language-independent) ── */
+
+function categoryKeyOf(e) {
+  return (e.category && e.category.trim()) ? e.category.trim() : '__none__';
+}
+
+function categoryNameOf(key) {
+  return key === '__none__' ? uncategorizedName() : key;
+}
+
+/* ── Aggregations (by TIME, not by event count) ── */
+
 function categoryAgg(events) {
   const map = new Map();
   events.forEach((e) => {
-    const name = (e.category && e.category.trim()) ? e.category.trim() : uncategorizedName();
-    const key = name === uncategorizedName() ? '__none__' : name;
+    const key = categoryKeyOf(e);
     if (!map.has(key)) {
-      map.set(key, { name: name, value: 0, color: key === '__none__' ? '#D1D1D6' : catColorOf(name, e.color) });
+      map.set(key, {
+        key,
+        name: categoryNameOf(key),
+        minutes: 0,
+        count: 0,
+        color: key === '__none__' ? '#C7C7CC' : catColorOf(categoryNameOf(key), e.color),
+      });
     }
-    map.get(key).value += 1;
+    const rec = map.get(key);
+    rec.minutes += eventMinutes(e);
+    rec.count += 1;
   });
-  return [...map.values()].sort((a, b) => b.value - a.value);
+  const segs = [...map.values()].sort((a, b) => b.minutes - a.minutes);
+  // Keep the muted palette, but never let two neighbours share a color.
+  const used = new Set();
+  segs.forEach((seg, i) => {
+    if (seg.key === '__none__') { seg.color = '#C7C7CC'; return; }
+    if (used.has(seg.color)) seg.color = Object.values(EVENT_COLORS)[(i + 1) % Object.keys(EVENT_COLORS).length];
+    used.add(seg.color);
+  });
+  return segs;
 }
 
-function totalHours(events) {
-  return events.reduce((s, e) => s + Math.max(0, toMinutes(e.endTime) - toMinutes(e.startTime)) / 60, 0);
-}
-
-function hourHistogram(events) {
-  const counts = new Array(24).fill(0);
+function tasksOf(events, categoryKey) {
+  const map = new Map();
   events.forEach((e) => {
-    const h = Math.min(23, Math.floor(toMinutes(e.startTime) / 60));
-    counts[h] += 1;
+    const key = categoryKeyOf(e);
+    if (categoryKey && key !== categoryKey) return;
+    if (!map.has(e.title)) {
+      map.set(e.title, {
+        title: e.title,
+        categoryKey: key,
+        minutes: 0,
+        count: 0,
+        color: key === '__none__' ? '#C7C7CC' : catColorOf(categoryNameOf(key), e.color),
+      });
+    }
+    const rec = map.get(e.title);
+    rec.minutes += eventMinutes(e);
+    rec.count += 1;
   });
-  return counts;
+  return [...map.values()].sort((a, b) => b.minutes - a.minutes);
 }
 
-/* ── SVG bar chart ── */
+function eventsForCategory(events, key) {
+  return events.filter((e) => categoryKeyOf(e) === key);
+}
+
+function eventsForTask(events, task) {
+  return events.filter((e) => e.title === task.title && categoryKeyOf(e) === task.categoryKey);
+}
+
+/* ── Tints for the Category → Task mini-donut ── */
+
+function tintOf(color, i, n) {
+  if (n <= 1) return color;
+  return hexToRgba(color, 1 - (i / Math.max(1, n - 1)) * 0.55);
+}
+
+/* ── Trend bucketing per range (minutes per bucket) ── */
+
+function buildTrend(events) {
+  const mode = insights.mode;
+  if (mode === 'day') {
+    const values = new Array(24).fill(0);
+    events.forEach((e) => { values[Math.min(23, Math.floor(toMinutes(e.startTime) / 60))] += eventMinutes(e); });
+    const labels = new Array(24).fill('');
+    [0, 6, 12, 18, 23].forEach((h) => { labels[h] = String(h); });
+    return {
+      kind: 'bar', labels, values,
+      pickLabel: (i) => (appLang === 'zh' ? pad2(i) + ' 点' : pad2(i) + ':00'),
+    };
+  }
+  if (mode === 'week') {
+    const mon = insightsPeriod().start;
+    const labels = [], keys = [], values = [];
+    for (let i = 0; i < 7; i++) {
+      const iso = addDaysISO(mon, i);
+      keys.push(iso);
+      labels.push(weekdayName(i));
+      values.push(0);
+    }
+    events.forEach((e) => {
+      const i = keys.indexOf(e.date);
+      if (i >= 0) values[i] += eventMinutes(e);
+    });
+    return {
+      kind: 'bar', labels, values, keys,
+      pickLabel: (i) => weekdayName(i) + ' · ' + formatShortDate(keys[i]),
+    };
+  }
+  if (mode === 'month') {
+    const dim = daysInMonth(insights.year, insights.month);
+    const labels = [], keys = [], values = [];
+    for (let d = 1; d <= dim; d++) {
+      keys.push(isoDate(insights.year, insights.month, d));
+      labels.push((d === 1 || d % 5 === 0) ? String(d) : '');
+      values.push(0);
+    }
+    labels[dim - 1] = String(dim);
+    events.forEach((e) => {
+      const i = keys.indexOf(e.date);
+      if (i >= 0) values[i] += eventMinutes(e);
+    });
+    return { kind: 'line', labels, values, keys, pickLabel: (i) => formatShortDate(keys[i]) };
+  }
+  const labels = [], values = [];
+  for (let m = 0; m < 12; m++) { labels.push(monthName(m, false)); values.push(0); }
+  events.forEach((e) => { values[parseISO(e.date).m] += eventMinutes(e); });
+  return { kind: 'bar', labels, values, pickLabel: (i) => monthName(i, true) + ' ' + insights.year };
+}
+
+/* ── Trend chart (hand-drawn SVG; tap a bucket to read its value) ── */
+
 function svgHost(svgString) {
   const d = el('div');
   d.innerHTML = svgString;
   return d;
 }
 
-function barsSVG(labels, values, opts) {
+function trendSVG(labels, values, opts) {
   opts = opts || {};
-  const W = 328, H = 150, padB = 18, padT = 12, padL = 6, padR = 6;
+  const W = 328, H = 150, padB = 18, padT = 14, padL = 10, padR = 10;
   const innerW = W - padL - padR;
   const innerH = H - padT - padB;
   const max = Math.max(1, ...values);
   const n = values.length;
   const step = innerW / n;
-  const bw = Math.max(3, Math.min(14, step * 0.55));
   const color = opts.color || EVENT_COLORS.blue;
-  let grid = '', rects = '', labelsOut = '';
-  [0, 0.5, 1].forEach((f) => {
-    const y = padT + innerH * (1 - f);
-    grid += '<line x1="' + padL + '" y1="' + y.toFixed(1) + '" x2="' + (W - padR) + '" y2="' + y.toFixed(1) + '" stroke="rgba(60,60,67,0.12)" stroke-width="1"/>';
-  });
-  values.forEach((v, i) => {
-    const h = v === 0 ? 0 : Math.max(3, (v / max) * innerH);
-    const x = padL + i * step + (step - bw) / 2;
-    const y = padT + innerH - h;
-    rects += '<rect x="' + x.toFixed(1) + '" y="' + y.toFixed(1) + '" width="' + bw.toFixed(1) + '" height="' + h.toFixed(1) + '" rx="' + Math.min(3, bw / 2).toFixed(1) + '" fill="' + color + '"/>';
-    if (labels[i]) {
-      labelsOut += '<text x="' + (x + bw / 2).toFixed(1) + '" y="' + (H - 6) + '" font-size="9" fill="#86868B" text-anchor="middle">' + labels[i] + '</text>';
-    }
-  });
-  const maxLabel = '<text x="' + padL + '" y="' + (padT + 8) + '" font-size="9" fill="#86868B">' + max + '</text>';
-  return '<svg class="bar-svg" viewBox="0 0 ' + W + ' ' + H + '" preserveAspectRatio="xMidYMid meet" role="img" aria-label="bar chart">' + grid + rects + maxLabel + labelsOut + '</svg>';
-}
-
-/* ── SVG line / area chart ── */
-function lineSVG(labels, values, opts) {
-  opts = opts || {};
-  const W = 328, H = 150, padB = 18, padT = 12, padL = 6, padR = 6;
-  const innerW = W - padL - padR;
-  const innerH = H - padT - padB;
-  const max = Math.max(1, ...values);
-  const n = values.length;
-  const step = innerW / n;
-  const color = opts.color || EVENT_COLORS.purple;
+  const type = opts.type || 'bar';
   let grid = '';
   [0, 0.5, 1].forEach((f) => {
     const y = padT + innerH * (1 - f);
-    grid += '<line x1="' + padL + '" y1="' + y.toFixed(1) + '" x2="' + (W - padR) + '" y2="' + y.toFixed(1) + '" stroke="rgba(60,60,67,0.12)" stroke-width="1"/>';
+    grid += '<line x1="' + padL + '" y1="' + y.toFixed(1) + '" x2="' + (W - padR) + '" y2="' + y.toFixed(1) + '" stroke="rgba(60,60,67,0.10)" stroke-width="1"/>';
   });
-  const pts = values.map((v, i) => {
-    const x = padL + i * step + step / 2;
-    const y = padT + innerH * (1 - v / max);
-    return [x, y];
-  });
-  let path = '';
-  pts.forEach((p, i) => { path += (i === 0 ? 'M' : 'L') + p[0].toFixed(1) + ' ' + p[1].toFixed(1) + ' '; });
-  const base = (H - padB).toFixed(1);
-  const area = path + 'L' + pts[pts.length - 1][0].toFixed(1) + ' ' + base + ' L' + pts[0][0].toFixed(1) + ' ' + base + ' Z';
-  const dots = pts.map((p) => '<circle cx="' + p[0].toFixed(1) + '" cy="' + p[1].toFixed(1) + '" r="2" fill="' + color + '"/>').join('');
-  let labelsOut = '';
-  labels.forEach((l, i) => {
-    if (!l) return;
-    labelsOut += '<text x="' + pts[i][0].toFixed(1) + '" y="' + (H - 6) + '" font-size="9" fill="#86868B" text-anchor="middle">' + l + '</text>';
-  });
-  const maxLabel = '<text x="' + padL + '" y="' + (padT + 8) + '" font-size="9" fill="#86868B">' + max + '</text>';
-  return '<svg class="bar-svg" viewBox="0 0 ' + W + ' ' + H + '" preserveAspectRatio="xMidYMid meet" role="img" aria-label="line chart">'
-    + grid
-    + '<path d="' + area + '" fill="' + hexToRgba(color, 0.12) + '"/>'
-    + '<path d="' + path + '" fill="none" stroke="' + color + '" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>'
-    + dots + maxLabel + labelsOut + '</svg>';
+  const maxLabel = '<text x="' + padL + '" y="' + (padT + 9) + '" font-size="9.5" fill="#86868B">' + fmtTimeShort(max) + '</text>';
+  let marks = '', labelsOut = '', hits = '';
+  const bw = Math.max(3, Math.min(13, step * 0.55));
+  if (type === 'line') {
+    const pts = values.map((v, i) => {
+      const x = padL + i * step + step / 2;
+      const y = padT + innerH * (1 - v / max);
+      return [x, y];
+    });
+    let path = '';
+    pts.forEach((p, i) => { path += (i === 0 ? 'M' : 'L') + p[0].toFixed(1) + ' ' + p[1].toFixed(1) + ' '; });
+    const base = (H - padB).toFixed(1);
+    const area = path + 'L' + pts[pts.length - 1][0].toFixed(1) + ' ' + base + ' L' + pts[0][0].toFixed(1) + ' ' + base + ' Z';
+    marks = '<path d="' + area + '" fill="' + hexToRgba(color, 0.10) + '"/>'
+      + '<path d="' + path + '" fill="none" stroke="' + color + '" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>'
+      + pts.map((p) => '<circle cx="' + p[0].toFixed(1) + '" cy="' + p[1].toFixed(1) + '" r="1.8" fill="' + color + '"/>').join('');
+    const hw = Math.max(step, 18) / 2;
+    hits = pts.map((p, i) => {
+      const x1 = Math.max(padL, p[0] - hw);
+      const x2 = Math.min(W - padR, p[0] + hw);
+      return '<rect data-i="' + i + '" x="' + x1.toFixed(1) + '" y="' + padT + '" width="' + Math.max(1, x2 - x1).toFixed(1) + '" height="' + innerH + '" fill="transparent"/>';
+    }).join('');
+  } else {
+    values.forEach((v, i) => {
+      const h = v === 0 ? 0 : Math.max(3, (v / max) * innerH);
+      const x = padL + i * step + (step - bw) / 2;
+      const y = padT + innerH - h;
+      marks += '<rect x="' + x.toFixed(1) + '" y="' + y.toFixed(1) + '" width="' + bw.toFixed(1) + '" height="' + h.toFixed(1) + '" rx="' + Math.min(3, bw / 2).toFixed(1) + '" fill="' + color + '"/>';
+      hits += '<rect data-i="' + i + '" x="' + (x - (step - bw) / 2).toFixed(1) + '" y="' + padT + '" width="' + step.toFixed(1) + '" height="' + innerH + '" fill="transparent"/>';
+      if (labels[i]) labelsOut += '<text x="' + (x + bw / 2).toFixed(1) + '" y="' + (H - 6) + '" font-size="9" fill="#86868B" text-anchor="middle">' + labels[i] + '</text>';
+    });
+  }
+  if (type === 'line') {
+    values.forEach((v, i) => {
+      if (!labels[i]) return;
+      const x = padL + i * step + step / 2;
+      labelsOut += '<text x="' + x.toFixed(1) + '" y="' + (H - 6) + '" font-size="9" fill="#86868B" text-anchor="middle">' + labels[i] + '</text>';
+    });
+  }
+  const svg = '<svg class="bar-svg trend-svg" viewBox="0 0 ' + W + ' ' + H + '" preserveAspectRatio="xMidYMid meet" role="img" aria-label="trend chart">'
+    + grid + marks + maxLabel + labelsOut + hits + '</svg>';
+  return svgHost(svg);
 }
 
-/* ── Donut / pie ── */
-function donutChart(segments, topLabel, subLabel) {
-  const wrap = el('div', 'donut-wrap');
-  const size = 160, cx = 80, cy = 80, r = 60, sw = 22;
+/* ── Interactive donut (tap a segment to select / drill down) ── */
+
+function donutChart(segments, opts) {
+  opts = opts || {};
+  const size = 196, cx = size / 2, cy = size / 2;
+  const r = size * 0.37, sw = size * 0.125;
   const C = 2 * Math.PI * r;
-  const GAP = 5; // px between segments so slices never blend together
-  const total = segments.reduce((s, x) => s + x.value, 0) || 0;
+  const GAP = 2.5;
+  const total = segments.reduce((s, x) => s + x.minutes, 0) || 0;
+  const wrap = el('div', 'donut-wrap');
   const svgBox = el('div', 'donut-svg');
-  svgBox.style.position = 'relative';
+  const selectedKey = opts.selectedKey || null;
   let circles = '';
   let offset = 0;
   segments.forEach((seg) => {
-    if (!total || seg.value <= 0) return;
-    const frac = seg.value / total;
+    if (!total || seg.minutes <= 0) return;
+    const frac = seg.minutes / total;
     const len = Math.max(2.5, frac * C - GAP);
-    circles += '<circle cx="' + cx + '" cy="' + cy + '" r="' + r + '" fill="none" stroke="' + seg.color + '" stroke-width="' + sw + '" stroke-dasharray="' + len.toFixed(2) + ' ' + (C - len).toFixed(2) + '" stroke-dashoffset="' + (-(offset * C) - GAP / 2).toFixed(2) + '" transform="rotate(-90 ' + cx + ' ' + cy + ')"/>';
+    const off = -(offset * C) - GAP / 2;
+    const isSel = selectedKey === seg.key;
+    const w = isSel ? sw + 6 : sw;
+    const opacity = selectedKey && !isSel ? 0.22 : 1;
+    circles += '<circle cx="' + cx + '" cy="' + cy + '" r="' + r + '" fill="none" stroke="' + seg.color + '" stroke-width="' + w + '" stroke-dasharray="' + len.toFixed(2) + ' ' + (C - len).toFixed(2) + '" stroke-dashoffset="' + off.toFixed(2) + '" transform="rotate(-90 ' + cx + ' ' + cy + ')" opacity="' + opacity + '" style="transition: opacity 0.18s ease, stroke-width 0.18s ease"/>';
     offset += frac;
   });
-  svgBox.innerHTML = '<svg width="' + size + '" height="' + size + '" viewBox="0 0 ' + size + ' ' + size + '" role="img" aria-label="pie chart">' + circles + '</svg>';
+  let hit = '';
+  offset = 0;
+  segments.forEach((seg) => {
+    if (!total || seg.minutes <= 0) return;
+    const frac = seg.minutes / total;
+    const len = Math.max(2.5, frac * C - GAP);
+    const off = -(offset * C) - GAP / 2;
+    hit += '<circle data-key="' + seg.key + '" cx="' + cx + '" cy="' + cy + '" r="' + r + '" fill="none" stroke="transparent" stroke-width="' + (sw + 26) + '" stroke-dasharray="' + len.toFixed(2) + ' ' + (C - len).toFixed(2) + '" stroke-dashoffset="' + off.toFixed(2) + '" transform="rotate(-90 ' + cx + ' ' + cy + ')" tabindex="0" role="button" aria-label="' + seg.name + '"/>';
+    offset += frac;
+  });
+  svgBox.innerHTML = '<svg width="' + size + '" height="' + size + '" viewBox="0 0 ' + size + ' ' + size + '" aria-hidden="true">' + circles + hit + '</svg>';
   const center = el('div', 'donut-center');
-  center.appendChild(el('div', 'dc-top', topLabel));
-  center.appendChild(el('div', 'dc-sub', subLabel));
+  const topEl = el('div', 'dc-top');
+  const subEl = el('div', 'dc-sub');
+  center.append(topEl, subEl);
   svgBox.appendChild(center);
   wrap.appendChild(svgBox);
 
-  const legend = el('div', 'donut-legend');
-  segments.forEach((seg) => {
-    const row = el('div', 'legend-row');
-    const dot = el('span', 'legend-dot');
-    dot.style.background = seg.color;
-    row.appendChild(dot);
-    row.appendChild(el('span', 'legend-name', seg.name));
-    row.appendChild(el('span', 'legend-val', String(seg.value)));
-    row.appendChild(el('span', 'legend-pct', total ? Math.round(seg.value / total * 100) + '%' : ''));
-    legend.appendChild(row);
+  function setCenter(top, sub, small) {
+    topEl.textContent = top;
+    subEl.textContent = sub;
+    topEl.classList.toggle('is-small', !!small);
+  }
+  setCenter(opts.centerTop || '', opts.centerSub || '', opts.centerSmall);
+
+  const onPick = opts.onPick;
+  function pick(key) {
+    const seg = segments.find((s) => s.key === key);
+    if (seg && onPick) onPick(seg);
+  }
+  svgBox.addEventListener('click', (ev) => {
+    const t2 = ev.target.closest ? ev.target.closest('circle[data-key]') : null;
+    if (t2) pick(t2.dataset.key);
   });
-  wrap.appendChild(legend);
+  svgBox.addEventListener('keydown', (ev) => {
+    if (ev.key !== 'Enter' && ev.key !== ' ') return;
+    const t2 = ev.target.closest ? ev.target.closest('circle[data-key]') : null;
+    if (t2) { ev.preventDefault(); pick(t2.dataset.key); }
+  });
+
+  return { el: wrap, svgBox, setCenter };
+}
+
+/* ── Ranked legend rows (donut legend + category ranking in one) ── */
+
+function rankList(segs, opts) {
+  opts = opts || {};
+  const list = el('div', 'rank-list');
+  const max = Math.max(1, ...segs.map((s) => s.minutes));
+  segs.forEach((seg) => {
+    const row = el('button', 'rank-row');
+    row.type = 'button';
+    if (opts.selectedKey === seg.key) row.classList.add('is-selected');
+    row.setAttribute('aria-pressed', String(opts.selectedKey === seg.key));
+    const line = el('span', 'rank-line');
+    const dot = el('span', 'rank-dot');
+    dot.style.background = seg.color;
+    line.append(
+      dot,
+      el('span', 'rank-name', seg.name),
+      el('span', 'rank-time', fmtTime(seg.minutes)),
+      el('span', 'rank-pct', pctOf(seg.minutes, opts.total) + '%'),
+    );
+    const chev = el('span', 'rank-chev');
+    chev.innerHTML = I.chevR;
+    line.appendChild(chev);
+    const bar = el('span', 'rank-bar');
+    const fill = el('span', 'rank-bar-fill');
+    fill.style.width = (seg.minutes / max * 100) + '%';
+    fill.style.background = seg.color;
+    bar.appendChild(fill);
+    row.append(line, bar);
+    row.addEventListener('click', () => opts.onPick(seg));
+    list.appendChild(row);
+  });
+  return list;
+}
+
+/* ── Task rows ── */
+
+function taskList(tasks, opts) {
+  const list = el('div', 'task-list');
+  tasks.forEach((task) => {
+    const row = el('button', 'task-row');
+    row.type = 'button';
+    const dot = el('span', 'rank-dot');
+    dot.style.background = task.color;
+    const body2 = el('span', 'task-body');
+    body2.appendChild(el('span', 'task-name', task.title));
+    const metaText = opts.hideCategory || task.categoryKey === '__none__'
+      ? sessionsMeta(task.count)
+      : categoryNameOf(task.categoryKey) + ' · ' + sessionsMeta(task.count);
+    body2.appendChild(el('span', 'task-meta', metaText));
+    const chev = el('span', 'rank-chev');
+    chev.innerHTML = I.chevR;
+    row.append(dot, body2, el('span', 'rank-time', fmtTime(task.minutes)), chev);
+    row.addEventListener('click', () => opts.onClick(task));
+    list.appendChild(row);
+  });
+  return list;
+}
+
+/* ── Session history (grouped by date, expandable) ── */
+
+function sessionHistory(events) {
+  const wrap = el('div', 'session-list');
+  const byDate = new Map();
+  events.forEach((e) => {
+    if (!byDate.has(e.date)) byDate.set(e.date, []);
+    byDate.get(e.date).push(e);
+  });
+  [...byDate.keys()].sort((a, b) => (a < b ? 1 : -1)).forEach((date) => {
+    const group = el('div', 'session-group');
+    group.appendChild(el('div', 'session-date', formatShortDate(date)));
+    byDate.get(date).forEach((e) => {
+      const row = el('button', 'session-row');
+      row.type = 'button';
+      row.setAttribute('aria-expanded', 'false');
+      row.append(
+        el('span', 'session-times', e.startTime + ' – ' + e.endTime),
+        el('span', 'session-dur', fmtTime(eventMinutes(e))),
+      );
+      const chev = el('span', 'session-chev');
+      chev.innerHTML = I.chevDown;
+      row.appendChild(chev);
+      row.addEventListener('click', () => {
+        const open = row.classList.toggle('is-open');
+        row.setAttribute('aria-expanded', String(open));
+      });
+      const detail = el('div', 'session-detail');
+      const fgrid = el('div', 'session-fields');
+      [
+        [t('date'), formatShortDate(e.date)],
+        [t('start'), e.startTime],
+        [t('end'), e.endTime],
+        [t('duration'), fmtTime(eventMinutes(e))],
+        [t('event'), e.title],
+        [t('category'), categoryNameOf(categoryKeyOf(e))],
+      ].forEach(([k, v]) => {
+        fgrid.append(el('span', 'sf-k', k), el('span', 'sf-v', v));
+      });
+      detail.appendChild(fgrid);
+      if (e.note) detail.appendChild(el('p', 'session-note', e.note));
+      const editBtn = el('button', 'session-edit', t('edit'));
+      editBtn.type = 'button';
+      editBtn.addEventListener('click', () => openEventSheet(e.id));
+      detail.appendChild(editBtn);
+      group.append(row, detail);
+    });
+    wrap.appendChild(group);
+  });
   return wrap;
 }
 
-/* ── Day timeline (time blocks) ── */
-function buildDayTimeline(events, nowMin) {
+/* ── Share ring (Task detail) ── */
+
+function ringSVG(pct, color) {
+  const size = 60, sw = 6, r = (size - sw) / 2, cx = size / 2, cy = size / 2;
+  const C = 2 * Math.PI * r;
+  const frac = Math.min(1, Math.max(0, pct / 100));
+  const wrap = el('div', 'share-ring');
+  wrap.innerHTML = '<svg width="' + size + '" height="' + size + '" viewBox="0 0 ' + size + ' ' + size + '" aria-hidden="true">'
+    + '<circle cx="' + cx + '" cy="' + cy + '" r="' + r + '" fill="none" stroke="rgba(60,60,67,0.10)" stroke-width="' + sw + '"/>'
+    + '<circle cx="' + cx + '" cy="' + cy + '" r="' + r + '" fill="none" stroke="' + color + '" stroke-width="' + sw + '" stroke-linecap="round" stroke-dasharray="' + Math.max(0.01, frac * C).toFixed(2) + ' ' + C.toFixed(2) + '" transform="rotate(-90 ' + cx + ' ' + cy + ')"/>'
+    + '</svg>';
+  wrap.appendChild(el('span', 'share-ring-pct', pct + '%'));
+  return wrap;
+}
+
+/* ── Shared card helpers ── */
+
+function chartCard() {
+  return el('section', 'chart-card');
+}
+
+function chartEmpty() {
+  return el('div', 'chart-empty', t('noData'));
+}
+
+function trendCard(shownEvents, color, nameLabel) {
+  const c = chartCard();
+  const head = el('div', 'chart-head');
+  const title = el('span', 'chart-head-title');
+  const dot = el('span', 'chart-head-dot');
+  dot.style.background = color;
+  title.appendChild(dot);
+  title.appendChild(document.createTextNode(t('trend')));
+  if (nameLabel) title.appendChild(el('span', 'chart-head-sub', nameLabel));
+  const info = el('span', 'trend-info');
+  head.append(title, info);
+  c.appendChild(head);
+  if (!shownEvents.length) { c.appendChild(chartEmpty()); return c; }
+  const tr = buildTrend(shownEvents);
+  if (tr.values.every((v) => v === 0)) { c.appendChild(chartEmpty()); return c; }
+  const host = trendSVG(tr.labels, tr.values, { type: tr.kind, color });
+  c.appendChild(host);
+  const svg = host.querySelector('svg');
+  svg.addEventListener('click', (ev) => {
+    const hitEl = ev.target.closest ? ev.target.closest('[data-i]') : null;
+    if (!hitEl) return;
+    const i = Number(hitEl.dataset.i);
+    info.textContent = tr.pickLabel(i) + ' · ' + fmtTime(tr.values[i]);
+  });
+  return c;
+}
+
+/* ── Day timeline (time blocks) — also used by the Today screen ── */
+
+function buildDayTimeline(events, nowMin, onBlockClick) {
   const wrap = el('div', 'timeline');
   const H = 480;
   const pxPerMin = H / 1440;
@@ -2408,7 +2805,10 @@ function buildDayTimeline(events, nowMin) {
       block.appendChild(el('div', 'tb-title', b.e.title));
       block.appendChild(el('div', 'tb-time', b.e.startTime + '–' + b.e.endTime));
       if (height < 34) block.classList.add('is-tiny');
-      block.addEventListener('click', () => openEventSheet(b.e.id));
+      block.addEventListener('click', () => {
+        if (onBlockClick) onBlockClick(b.e);
+        else openEventSheet(b.e.id);
+      });
       canvas.appendChild(block);
     });
   });
@@ -2424,95 +2824,297 @@ function buildDayTimeline(events, nowMin) {
   return wrap;
 }
 
-/* ── Week daily duration bars (time blocks per day) ── */
-function buildWeekDurationBars(events, mondayISO) {
-  const byDate = new Map();
-  events.forEach((e) => {
-    byDate.set(e.date, (byDate.get(e.date) || 0) + Math.max(0, toMinutes(e.endTime) - toMinutes(e.startTime)));
-  });
-  const labels = [];
-  const values = [];
-  for (let i = 0; i < 7; i++) {
-    const iso = addDaysISO(mondayISO, i);
-    labels.push(weekdayName(i));
-    values.push(Math.round(((byDate.get(iso) || 0) / 60) * 10) / 10);
+/* ── VIEW 1: Overview ── */
+
+function renderOverview(view) {
+  const evs = insightsEvents();
+  const total = sumMinutes(evs);
+  const segs = categoryAgg(evs);
+  const sel = analytics.selected ? segs.find((s) => s.key === analytics.selected) : null;
+
+  // Hero — the period's total, front and center
+  const hero = el('section', 'analytics-hero');
+  hero.appendChild(el('span', 'hero-label', t('totalTime')));
+  hero.appendChild(el('div', 'hero-value', fmtTime(total)));
+  hero.appendChild(el('div', 'hero-meta',
+    insightsLabel() + ' · ' + sessionsMeta(evs.length) + ' · ' + activeDaysMeta(new Set(evs.map((e) => e.date)).size)));
+  view.appendChild(hero);
+
+  // Day range: the time-block timeline IS the trend
+  if (insights.mode === 'day') {
+    const c = chartCard();
+    c.appendChild(el('h3', 'chart-title', t('dayBlocks')));
+    const shown = sel ? eventsForCategory(evs, sel.key) : evs;
+    const isToday = isoDate(insights.year, insights.month, insights.day) === todayISO();
+    c.appendChild(shown.length
+      ? buildDayTimeline(shown, isToday ? currentMinutes() : null,
+        (e) => analyticsGo('task', { task: { title: e.title, categoryKey: categoryKeyOf(e) } }))
+      : chartEmpty());
+    view.appendChild(c);
   }
-  return svgHost(barsSVG(labels, values, { color: EVENT_COLORS.green }));
-}
 
-/* ── Week columns (time blocks per day) ── */
-function buildWeekColumns(events, mondayISO) {
-  const wrap = el('div', 'week-cols');
-  const byDate = new Map();
-  events.forEach((e) => {
-    if (!byDate.has(e.date)) byDate.set(e.date, []);
-    byDate.get(e.date).push(e);
-  });
-  const today = todayISO();
-  for (let i = 0; i < 7; i++) {
-    const iso = addDaysISO(mondayISO, i);
-    const { m, d } = parseISO(iso);
-    const col = el('div', 'wcol');
-    if (iso === today) col.classList.add('is-today');
-    const head = el('div', 'wcol-head');
-    head.appendChild(el('span', 'wcol-dow', weekdayName(i)));
-    head.appendChild(el('span', 'wcol-date', appLang === 'zh' ? String(d) : monthName(m, false) + ' ' + d));
-    col.appendChild(head);
-    const body = el('div', 'wcol-body');
-    const evs = byDate.get(iso) || [];
-    evs.slice(0, 3).forEach((e) => {
-      const chip = el('div', 'wcol-chip');
-      const dot = el('span', 'wcol-dot');
-      dot.style.background = EVENT_COLORS[e.color] || EVENT_COLORS.blue;
-      const ttl = el('span', 'wcol-title', e.title);
-      ttl.title = e.startTime + ' ' + e.title;
-      chip.append(dot, ttl);
-      body.appendChild(chip);
-    });
-    if (evs.length > 3) body.appendChild(el('div', 'wcol-more', '+' + (evs.length - 3)));
-    if (!evs.length) body.appendChild(el('div', 'wcol-empty', '·'));
-    col.appendChild(body);
-    wrap.appendChild(col);
+  // Donut — interactive time distribution with ranked legend
+  const dc = chartCard();
+  dc.appendChild(el('h3', 'chart-title', t('timeDistribution')));
+  if (!segs.length) {
+    dc.appendChild(chartEmpty());
+  } else {
+    dc.appendChild(donutChart(segs, {
+      selectedKey: sel ? sel.key : null,
+      centerTop: sel ? sel.name : fmtTime(total),
+      centerSub: sel ? (fmtTime(sel.minutes) + ' · ' + pctOf(sel.minutes, total) + '%') : insightsLabel(),
+      centerSmall: !!sel,
+      onPick: (seg) => {
+        if (sel && sel.key === seg.key) analyticsGo('category', { categoryKey: seg.key });
+        else { analytics.selected = seg.key; renderInsights(); }
+      },
+    }).el);
+    dc.appendChild(rankList(segs, {
+      total,
+      selectedKey: sel ? sel.key : null,
+      onPick: (seg) => {
+        if (sel && sel.key === seg.key) analyticsGo('category', { categoryKey: seg.key });
+        else { analytics.selected = seg.key; renderInsights(); }
+      },
+    }));
   }
-  return wrap;
+  view.appendChild(dc);
+
+  // Trend for Week / Month / Year
+  if (insights.mode !== 'day') {
+    view.appendChild(trendCard(
+      sel ? eventsForCategory(evs, sel.key) : evs,
+      sel ? sel.color : EVENT_COLORS.blue,
+      sel ? sel.name : null,
+    ));
+  }
+
+  // Tasks — top tasks overall, or the selected category's tasks
+  const tc = chartCard();
+  const head = el('div', 'chart-head');
+  const title = el('span', 'chart-head-title');
+  if (sel) {
+    const dot = el('span', 'chart-head-dot');
+    dot.style.background = sel.color;
+    title.append(dot, el('span', 'chart-head-sub', sel.name));
+    head.appendChild(title);
+    const goBtn = el('button', 'chart-head-action', t('viewDetails') + ' ›');
+    goBtn.type = 'button';
+    goBtn.addEventListener('click', () => analyticsGo('category', { categoryKey: sel.key }));
+    head.appendChild(goBtn);
+    const reset = el('button', 'chip chip-reset', t('allCategories') + ' ×');
+    reset.type = 'button';
+    reset.addEventListener('click', () => { analytics.selected = null; renderInsights(); });
+    head.appendChild(reset);
+  } else {
+    title.appendChild(document.createTextNode(t('topTasks')));
+    head.appendChild(title);
+  }
+  tc.appendChild(head);
+  const tasks = tasksOf(evs, sel ? sel.key : null);
+  if (!tasks.length) tc.appendChild(el('div', 'chart-empty', t('noSessions')));
+  else tc.appendChild(taskList(tasks.slice(0, sel ? 14 : 6), {
+    hideCategory: !!sel,
+    onClick: (task) => analyticsGo('task', { task }),
+  }));
+  view.appendChild(tc);
 }
 
-function chartEmpty() {
-  return el('div', 'chart-empty', t('noData'));
+/* ── VIEW 2: Category ── */
+
+function renderCategory(view, key) {
+  const name = categoryNameOf(key);
+  const evs = insightsEvents();
+  const catEvs = eventsForCategory(evs, key);
+  const total = sumMinutes(evs);
+  const mins = sumMinutes(catEvs);
+  const seg = categoryAgg(evs).find((s) => s.key === key);
+  const color = seg ? seg.color : catColorOf(name, 'blue');
+
+  const hero = el('section', 'analytics-hero is-detail');
+  const head = el('div', 'hero-head');
+  const dot = el('span', 'hero-dot');
+  dot.style.background = color;
+  head.append(dot, el('span', 'hero-title', name));
+  hero.appendChild(head);
+  hero.appendChild(el('div', 'hero-value', fmtTime(mins)));
+  hero.appendChild(el('div', 'hero-meta',
+    shareText(pctOf(mins, total)) + ' · ' + sessionsMeta(catEvs.length) + ' · '
+    + t('avgShort') + ' ' + fmtTime(catEvs.length ? mins / catEvs.length : 0)));
+  view.appendChild(hero);
+
+  view.appendChild(trendCard(catEvs, color));
+
+  const dc = chartCard();
+  dc.appendChild(el('h3', 'chart-title', t('timeDistribution')));
+  const tasks = tasksOf(catEvs, key);
+  if (!tasks.length) {
+    dc.appendChild(el('div', 'chart-empty', t('noSessions')));
+  } else {
+    const donutSegs = tasks.map((t2, i) => ({
+      key: 'task-' + i,
+      name: t2.title,
+      minutes: t2.minutes,
+      color: tintOf(color, i, tasks.length),
+    }));
+    dc.appendChild(donutChart(donutSegs, {
+      centerTop: String(tasks.length),
+      centerSub: t('tasksCount', { n: tasks.length }),
+      onPick: (dseg) => analyticsGo('task', { task: tasks[Number(dseg.key.slice(5))] }),
+    }).el);
+    dc.appendChild(taskList(tasks, {
+      hideCategory: true,
+      onClick: (t2) => analyticsGo('task', { task: t2 }),
+    }));
+  }
+  view.appendChild(dc);
 }
 
-function statTilesRow(tiles) {
-  const row = el('div', 'stat-row');
-  tiles.forEach(([label, value]) => row.appendChild(statTile(label, value)));
-  return row;
+/* ── VIEW 3: Task detail ── */
+
+function renderTask(view, task) {
+  const evs = insightsEvents();
+  const tEvs = eventsForTask(evs, task)
+    .slice()
+    .sort((a, b) => (a.date === b.date ? (a.startTime < b.startTime ? -1 : 1) : (a.date < b.date ? -1 : 1)));
+  const total = sumMinutes(evs);
+  const mins = sumMinutes(tEvs);
+  const share = pctOf(mins, total);
+  const name = categoryNameOf(task.categoryKey);
+  const color = task.categoryKey === '__none__'
+    ? '#C7C7CC'
+    : catColorOf(name, tEvs.length ? tEvs[0].color : 'blue');
+
+  const hero = el('section', 'analytics-hero is-detail');
+  const row = el('div', 'hero-row');
+  const col = el('div', 'hero-col');
+  col.appendChild(el('div', 'hero-title', task.title));
+  const chip = el('span', 'hero-chip');
+  const cdot = el('span', 'hero-chip-dot');
+  cdot.style.background = color;
+  chip.append(cdot, el('span', '', name));
+  col.appendChild(chip);
+  row.append(col, ringSVG(share, color));
+  hero.appendChild(row);
+  hero.appendChild(el('div', 'hero-meta', shareText(share) + ' · ' + sessionsMeta(tEvs.length)));
+  view.appendChild(hero);
+
+  const first = tEvs.length ? tEvs[0] : null;
+  const last = tEvs.length ? tEvs[tEvs.length - 1] : null;
+  const avg = tEvs.length ? mins / tEvs.length : 0;
+  let freqValue = '—';
+  if (tEvs.length) {
+    const d1 = new Date(parseISO(first.date).y, parseISO(first.date).m, parseISO(first.date).d);
+    const d2 = new Date(parseISO(last.date).y, parseISO(last.date).m, parseISO(last.date).d);
+    const spanIncl = (d2 - d1) / 86400000 + 1; // days from first to last record, inclusive
+    if (spanIncl >= 7) {
+      const perWeek = Math.round(tEvs.length / (spanIncl / 7) * 10) / 10;
+      freqValue = appLang === 'zh' ? '每周 ' + perWeek + ' 次' : perWeek + ' / week';
+    } else {
+      const perDay = Math.round(tEvs.length / spanIncl * 10) / 10;
+      freqValue = appLang === 'zh' ? '每天 ' + perDay + ' 次' : perDay + ' / day';
+    }
+  }
+  const grid = el('div', 'stat-grid');
+  grid.appendChild(statTile(t('totalTime'), fmtTime(mins)));
+  grid.appendChild(statTile(t('sessionsTile'), String(tEvs.length)));
+  grid.appendChild(statTile(t('avgSession'), fmtTime(avg)));
+  grid.appendChild(statTile(t('frequency'), freqValue));
+  const firstTile = statTile(t('firstRecorded'), first ? shortDay(first.date) : '—');
+  const lastTile = statTile(t('lastRecorded'), last ? shortDay(last.date) : '—');
+  if (first) firstTile.title = formatShortDate(first.date);
+  if (last) lastTile.title = formatShortDate(last.date);
+  grid.append(firstTile, lastTile);
+  view.appendChild(grid);
+
+  view.appendChild(trendCard(tEvs, color));
+
+  const hc = chartCard();
+  hc.appendChild(el('h3', 'chart-title', t('history')));
+  hc.appendChild(tEvs.length ? sessionHistory(tEvs) : el('div', 'chart-empty', t('noSessions')));
+  view.appendChild(hc);
 }
 
-function busiestDay(events) {
-  const byDate = new Map();
-  events.forEach((e) => byDate.set(e.date, (byDate.get(e.date) || 0) + 1));
-  let best = null;
-  byDate.forEach((v, k) => { if (!best || v > best.v) best = { date: k, v }; });
-  return best ? formatShortDate(best.date) : '—';
+/* ── Drill-down navigation ── */
+
+function renderInsightsNav() {
+  const nav = document.getElementById('insightsNav');
+  const titleEl = document.getElementById('insightsNavTitle');
+  if (!nav || !titleEl) return;
+  const { level, category, task } = analytics.route;
+  if (level === 'overview') { nav.setAttribute('hidden', ''); return; }
+  nav.removeAttribute('hidden');
+  titleEl.innerHTML = '';
+  if (level === 'category') {
+    const seg = categoryAgg(insightsEvents()).find((s) => s.key === category);
+    const dot = el('span', 'nav-dot');
+    dot.style.background = seg ? seg.color : '#C7C7CC';
+    titleEl.append(dot, el('span', 'nav-name', categoryNameOf(category)));
+  } else if (task) {
+    titleEl.appendChild(el('span', 'nav-name', task.title));
+  }
 }
 
-function renderInsights() {
+function analyticsGo(level, payload) {
+  const prev = analytics.route;
+  if (level === 'overview') {
+    analytics.route = { level: 'overview', category: null, task: null, prevLevel: prev.level, prevCategory: prev.category, prevTask: prev.task };
+    analytics.selected = null;
+  } else if (level === 'category') {
+    analytics.route = { level: 'category', category: payload.categoryKey, task: null, prevLevel: prev.level, prevCategory: prev.category, prevTask: prev.task };
+  } else {
+    analytics.route = {
+      level: 'task',
+      category: payload.task ? payload.task.categoryKey : null,
+      task: payload.task || null,
+      prevLevel: prev.level,
+      prevCategory: prev.category,
+      prevTask: prev.task,
+    };
+  }
+  renderInsights('push');
+}
+
+function analyticsBack() {
+  const r = analytics.route;
+  if (r.level === 'task') {
+    if (r.prevLevel === 'category' && r.prevCategory) {
+      analytics.route = { level: 'category', category: r.prevCategory, task: null };
+    } else {
+      analytics.route = { level: 'overview', category: null, task: null };
+    }
+  } else if (r.level === 'category') {
+    analytics.route = { level: 'overview', category: null, task: null };
+  } else {
+    return;
+  }
+  renderInsights('pop');
+}
+
+function analyticsReset() {
+  analytics.route = { level: 'overview', category: null, task: null };
+  analytics.selected = null;
+}
+
+function renderInsights(dir) {
   const segHost = document.getElementById('insightsSeg');
   const periodHost = document.getElementById('insightsPeriod');
   const body = document.getElementById('insightsBody');
   if (!segHost || !periodHost || !body) return;
 
-  // ── Segments 日/周/月/年
+  // Range segments — shared by every level of the drill-down
   segHost.innerHTML = '';
   [['day', 'segDay'], ['week', 'segWeek'], ['month', 'segMonth'], ['year', 'segYear']].forEach(([m, k]) => {
     const b = el('button', 'seg-btn', t(k));
     b.type = 'button';
     b.setAttribute('role', 'tab');
+    b.setAttribute('aria-selected', String(insights.mode === m));
     if (insights.mode === m) b.classList.add('is-active');
     b.addEventListener('click', () => { insights.mode = m; renderInsights(); });
     segHost.appendChild(b);
   });
 
-  // ── Period selector
+  // Period selector
   periodHost.innerHTML = '';
   const prevBtn = el('button', 'icon-btn');
   prevBtn.type = 'button';
@@ -2521,10 +3123,10 @@ function renderInsights() {
   prevBtn.addEventListener('click', () => shiftInsights(-1));
   const labelBtn = el('button', 'period-label');
   labelBtn.type = 'button';
-  const lbl = el('span', '', insightsLabel());
+  labelBtn.append(el('span', '', insightsLabel()));
   const chev = el('span', 'chevron-down');
   chev.innerHTML = I.chevDown;
-  labelBtn.append(lbl, chev);
+  labelBtn.appendChild(chev);
   labelBtn.addEventListener('click', openInsightsPicker);
   const nextBtn = el('button', 'icon-btn');
   nextBtn.type = 'button';
@@ -2533,75 +3135,20 @@ function renderInsights() {
   nextBtn.addEventListener('click', () => shiftInsights(1));
   periodHost.append(prevBtn, labelBtn, nextBtn);
 
-  // ── Body
+  renderInsightsNav();
+
   body.innerHTML = '';
-  const evs = insightsEvents();
+  const view = el('div', 'insights-view');
+  if (dir === 'push') view.classList.add('view-push');
+  else if (dir === 'pop') view.classList.add('view-pop');
+  body.appendChild(view);
 
-  const card = () => body.appendChild(el('section', 'chart-card'));
+  const { level, category, task } = analytics.route;
+  if (level === 'category' && category) renderCategory(view, category);
+  else if (level === 'task' && task) renderTask(view, task);
+  else renderOverview(view);
 
-  const hourLabels = () => {
-    const labels = new Array(24).fill('');
-    [0, 6, 12, 18, 23].forEach((h) => { labels[h] = String(h); });
-    return labels;
-  };
-  const pieCard = () => {
-    const c = card();
-    c.appendChild(el('h3', 'chart-title', t('dayPie')));
-    const segs = categoryAgg(evs);
-    c.appendChild(segs.length ? donutChart(segs, String(evs.length), t('events')) : chartEmpty());
-  };
-  const distributionCard = () => {
-    const c = card();
-    c.appendChild(el('h3', 'chart-title', t('timeDistribution')));
-    const hist = hourHistogram(evs);
-    c.appendChild(evs.length ? svgHost(barsSVG(hourLabels(), hist, { color: EVENT_COLORS.blue })) : chartEmpty());
-  };
-
-  if (insights.mode === 'day') {
-    const c1 = card();
-    c1.appendChild(el('h3', 'chart-title', t('dayBlocks')));
-    const isToday = isoDate(insights.year, insights.month, insights.day) === todayISO();
-    c1.appendChild(evs.length ? buildDayTimeline(evs, isToday ? currentMinutes() : null) : chartEmpty());
-    pieCard();
-  } else if (insights.mode === 'week') {
-    pieCard();
-    // Time distribution by weekday (hours per day).
-    const c = card();
-    c.appendChild(el('h3', 'chart-title', t('timeDistribution')));
-    c.appendChild(evs.length ? buildWeekDurationBars(evs, insightsPeriod().start) : chartEmpty());
-    // Week blocks: 7 columns listing each day's events.
-    const c2 = card();
-    c2.appendChild(el('h3', 'chart-title', t('weekBlocks')));
-    c2.appendChild(evs.length ? buildWeekColumns(evs, insightsPeriod().start) : chartEmpty());
-  } else if (insights.mode === 'month') {
-    pieCard();
-    const c1 = card();
-    c1.appendChild(el('h3', 'chart-title', t('activity')));
-    c1.appendChild(statTilesRow([
-      [t('totalEvents'), String(evs.length)],
-      [t('activeDays'), String(new Set(evs.map((e) => e.date)).size)],
-      [t('totalHours'), Math.round(totalHours(evs) * 10) / 10 + t('hoursUnit')],
-      [t('busiestDay'), busiestDay(evs)],
-    ]));
-    const c2 = card();
-    c2.appendChild(el('h3', 'chart-title', t('activeTrend')));
-    const dim = daysInMonth(insights.year, insights.month);
-    const perDay = new Array(dim).fill(0);
-    evs.forEach((e) => { const d = parseISO(e.date).d; if (d >= 1 && d <= dim) perDay[d - 1] += 1; });
-    const dLabels = perDay.map((v, i) => (i === 0 || (i + 1) % 5 === 0 ? String(i + 1) : ''));
-    dLabels[dim - 1] = String(dim);
-    c2.appendChild(evs.length ? svgHost(lineSVG(dLabels, perDay, { color: EVENT_COLORS.purple })) : chartEmpty());
-    distributionCard();
-  } else {
-    pieCard();
-    const c1 = card();
-    c1.appendChild(el('h3', 'chart-title', t('activeTrend')));
-    const perMonth = new Array(12).fill(0);
-    evs.forEach((e) => { perMonth[parseISO(e.date).m] += 1; });
-    const mLabels = perMonth.map((v, i) => monthName(i, false));
-    c1.appendChild(evs.length ? svgHost(barsSVG(mLabels, perMonth, { color: EVENT_COLORS.purple })) : chartEmpty());
-    distributionCard();
-  }
+  if (dir === 'push') window.scrollTo({ top: 0 });
 }
 
 /* ── Weeks of a year (for the week picker) ── */
@@ -2764,6 +3311,7 @@ async function refreshCategories() {
 }
 
 function showTab(tab) {
+  const wasOnInsights = state.tab === 'insights';
   state.tab = tab;
   showScreen(tab);
   document.querySelectorAll('.tab-item').forEach((b) => {
@@ -2774,6 +3322,8 @@ function showTab(tab) {
   });
   moveTabIndicator();
   window.scrollTo({ top: 0 });
+  // Tapping the active Insights tab again pops the drill-down back to the overview.
+  if (tab === 'insights' && wasOnInsights) analyticsReset();
   refreshAll();
 }
 
@@ -2815,6 +3365,7 @@ function wireNavigation() {
   document.getElementById('btnTodayTop').addEventListener('click', goToToday);
   document.getElementById('btnAddDay').addEventListener('click', () => openEventSheet(null));
   document.getElementById('btnAddToday').addEventListener('click', () => openEventSheet(null, { date: todayISO() }));
+  document.getElementById('insightsBack').addEventListener('click', analyticsBack);
 }
 
 function wireImportFile() {

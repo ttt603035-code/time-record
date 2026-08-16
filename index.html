@@ -76,6 +76,14 @@
         <h1 class="page-title" data-i18n="insights">Insights</h1>
       </header>
 
+      <!-- Drill-down navigation: Overview → Category → Task -->
+      <nav class="insights-nav" id="insightsNav" aria-label="Analytics navigation" hidden>
+        <button class="insights-back" id="insightsBack" type="button" aria-label="Back">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 6l-6 6 6 6" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </button>
+        <div class="insights-nav-title" id="insightsNavTitle"></div>
+      </nav>
+
       <div class="insights-seg" id="insightsSeg" role="tablist"></div>
       <div class="insights-period" id="insightsPeriod"></div>
       <div class="insights-body" id="insightsBody"></div>
