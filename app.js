@@ -270,13 +270,18 @@ function normalizeEvent(e) {
   };
 }
 
-/** Accepts an array or an envelope {events:[...]} — used by import & future Shortcuts. */
+/**
+ * Accept an event, an array, or an {events:[...]} / {data:[...]} envelope.
+ * Supporting one event is important for Apple Shortcuts URL imports, where a
+ * Shortcut normally opens the app once for each newly-created calendar item.
+ */
 function normalizeImport(data) {
   let list = null;
   if (Array.isArray(data)) list = data;
   else if (data && typeof data === 'object') {
     if (Array.isArray(data.events)) list = data.events;
     else if (Array.isArray(data.data)) list = data.data;
+    else if (data.date || data.title) list = [data];
   }
   if (!list) return [];
   return list
@@ -373,6 +378,7 @@ const StorageService = (() => {
 
   async function saveEvents(events) {
     memoryEvents = events.map(normalizeEvent);
+    wasFresh = false;
     if (!ls) return false;
     try {
       ls.setItem(KEY, JSON.stringify({ version: 1, events: memoryEvents }));
@@ -454,6 +460,7 @@ const StorageService = (() => {
 
   async function saveCategories(list) {
     memoryCategories = list.map(normalizeCategory);
+    categoriesFresh = false;
     if (!ls) return false;
     try { ls.setItem(CATEGORY_KEY, JSON.stringify(memoryCategories)); return true; } catch (err) { return false; }
   }
@@ -1796,6 +1803,72 @@ function importData() {
   input.click();
 }
 
+/** Import events and optional categories from either a file or a Shortcut URL. */
+async function importPayload(data) {
+  const events = normalizeImport(data);
+  const categories = data && Array.isArray(data.categories) ? data.categories : [];
+  if (!events.length && !categories.length) throw new Error('No importable records');
+
+  const res = events.length
+    ? await DataService.importAll(events)
+    : { added: 0, updated: 0 };
+
+  // Linked import: categories can travel in the same backup envelope.
+  if (categories.length) {
+    const merged = state.categories.slice();
+    categories.forEach((item) => {
+      if (!item || typeof item !== 'object') return;
+      const cat = normalizeCategory(item);
+      const i = merged.findIndex((x) => x.name.toLowerCase() === cat.name.toLowerCase());
+      if (i >= 0) merged[i] = cat;
+      else merged.push(cat);
+    });
+    await DataService.saveCategories(merged);
+  }
+
+  await refreshEvents();
+  await refreshCategories();
+  return res;
+}
+
+function parseShortcutImport(raw) {
+  // URLSearchParams already performs normal percent-decoding. Trying a second
+  // decode only after a parse failure also supports Shortcuts that encode the
+  // JSON value twice.
+  try {
+    return JSON.parse(raw);
+  } catch (firstError) {
+    const decoded = decodeURIComponent(raw);
+    if (decoded === raw) throw firstError;
+    return JSON.parse(decoded);
+  }
+}
+
+async function importFromShortcutURL() {
+  let url;
+  try { url = new URL(window.location.href); } catch (err) { return false; }
+  if (!url.searchParams.has('import')) return false;
+
+  const raw = url.searchParams.get('import') || '';
+
+  // Consume the parameter once. This prevents a reload from adding another ID
+  // when a Shortcut sends an event without one, and removes calendar details
+  // from browser history/address-bar sharing.
+  url.searchParams.delete('import');
+  try {
+    window.history.replaceState(null, '', url.pathname + url.search + url.hash);
+  } catch (err) { /* replaceState may be unavailable in an embedded preview */ }
+
+  try {
+    const res = await importPayload(parseShortcutImport(raw));
+    toast(t('imported', { n: res.added + res.updated }));
+    return true;
+  } catch (err) {
+    toast(t('importFailed'));
+    return false;
+  }
+}
+
 function clearAllData() {
   showDialog({
     title: t('clearAllTitle'),
@@ -2526,35 +2599,70 @@ function donutChart(segments, opts) {
   const size = 196, cx = size / 2, cy = size / 2;
   const r = size * 0.37, sw = size * 0.125;
   const C = 2 * Math.PI * r;
-  const GAP = 2.5;
+  const GAP = 3; // final visible separation between neighbouring rounded caps
   const total = segments.reduce((s, x) => s + x.minutes, 0) || 0;
+  const drawable = segments.filter((seg) => total && seg.minutes > 0);
   const wrap = el('div', 'donut-wrap');
   const svgBox = el('div', 'donut-svg');
   const selectedKey = opts.selectedKey || null;
+
+  function attr(value) {
+    return String(value).replace(/[&<>"']/g, (char) => ({
+      '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
+    })[char]);
+  }
+
   let circles = '';
   let offset = 0;
-  segments.forEach((seg) => {
-    if (!total || seg.minutes <= 0) return;
+  drawable.forEach((seg) => {
     const frac = seg.minutes / total;
-    const len = Math.max(2.5, frac * C - GAP);
-    const off = -(offset * C) - GAP / 2;
+    const arc = frac * C;
     const isSel = selectedKey === seg.key;
     const w = isSel ? sw + 6 : sw;
     const opacity = selectedKey && !isSel ? 0.22 : 1;
-    circles += '<circle cx="' + cx + '" cy="' + cy + '" r="' + r + '" fill="none" stroke="' + seg.color + '" stroke-width="' + w + '" stroke-dasharray="' + len.toFixed(2) + ' ' + (C - len).toFixed(2) + '" stroke-dashoffset="' + off.toFixed(2) + '" transform="rotate(-90 ' + cx + ' ' + cy + ')" opacity="' + opacity + '" style="transition: opacity 0.18s ease, stroke-width 0.18s ease"/>';
+    let dash = '';
+
+    if (drawable.length > 1) {
+      // A round line cap extends by half the stroke width at both ends. Trim a
+      // full stroke width plus GAP from each segment's centreline so the final
+      // cap-to-cap gap remains 3px instead of overlapping into a solid ring.
+      const trim = w + GAP;
+      const len = Math.max(0.1, arc - trim);
+      const start = offset * C + trim / 2;
+      dash = ' stroke-dasharray="' + len.toFixed(2) + ' ' + (C - len).toFixed(2)
+        + '" stroke-dashoffset="' + (-start).toFixed(2) + '"';
+    }
+
+    circles += '<circle cx="' + cx + '" cy="' + cy + '" r="' + r
+      + '" fill="none" stroke="' + attr(seg.color) + '" stroke-width="' + w
+      + '" stroke-linecap="round"' + dash
+      + ' transform="rotate(-90 ' + cx + ' ' + cy + ')" opacity="' + opacity
+      + '" style="transition: opacity 0.18s ease, stroke-width 0.18s ease"/>';
     offset += frac;
   });
+
   let hit = '';
   offset = 0;
-  segments.forEach((seg) => {
-    if (!total || seg.minutes <= 0) return;
+  drawable.forEach((seg) => {
     const frac = seg.minutes / total;
-    const len = Math.max(2.5, frac * C - GAP);
-    const off = -(offset * C) - GAP / 2;
-    hit += '<circle data-key="' + seg.key + '" cx="' + cx + '" cy="' + cy + '" r="' + r + '" fill="none" stroke="transparent" stroke-width="' + (sw + 26) + '" stroke-dasharray="' + len.toFixed(2) + ' ' + (C - len).toFixed(2) + '" stroke-dashoffset="' + off.toFixed(2) + '" transform="rotate(-90 ' + cx + ' ' + cy + ')" tabindex="0" role="button" aria-label="' + seg.name + '"/>';
+    const arc = frac * C;
+    let dash = '';
+    if (drawable.length > 1) {
+      const len = Math.max(0.1, arc - GAP);
+      const start = offset * C + GAP / 2;
+      dash = ' stroke-dasharray="' + len.toFixed(2) + ' ' + (C - len).toFixed(2)
+        + '" stroke-dashoffset="' + (-start).toFixed(2) + '"';
+    }
+    hit += '<circle data-key="' + attr(seg.key) + '" cx="' + cx + '" cy="' + cy
+      + '" r="' + r + '" fill="none" stroke="transparent" stroke-width="' + (sw + 26)
+      + '" stroke-linecap="butt"' + dash + ' transform="rotate(-90 ' + cx + ' ' + cy
+      + ')" tabindex="0" role="button" aria-label="' + attr(seg.name) + '"/>';
     offset += frac;
   });
-  svgBox.innerHTML = '<svg width="' + size + '" height="' + size + '" viewBox="0 0 ' + size + ' ' + size + '" aria-hidden="true">' + circles + hit + '</svg>';
+
+  svgBox.innerHTML = '<svg width="' + size + '" height="' + size + '" viewBox="0 0 '
+    + size + ' ' + size + '" role="group" aria-label="' + attr(t('timeDistribution')) + '">'
+    + circles + hit + '</svg>';
   const center = el('div', 'donut-center');
   const topEl = el('div', 'dc-top');
   const subEl = el('div', 'dc-sub');
@@ -3375,22 +3483,9 @@ function wireImportFile() {
     try {
       const text = await file.text();
       const data = JSON.parse(text);
-      const res = await DataService.importAll(data);
-      // Linked import: categories come along in the same backup file.
-      if (data && Array.isArray(data.categories)) {
-        const merged = state.categories.slice();
-        data.categories.forEach((c) => {
-          const cat = normalizeCategory(c);
-          const i = merged.findIndex((x) => x.name.toLowerCase() === cat.name.toLowerCase());
-          if (i >= 0) merged[i] = cat; else merged.push(cat);
-        });
-        await DataService.saveCategories(merged);
-        await refreshCategories();
-      }
-      await refreshEvents();
+      const res = await importPayload(data);
       refreshAll();
-      const n = res.added + res.updated;
-      toast(t('imported', { n: n }));
+      toast(t('imported', { n: res.added + res.updated }));
     } catch (err) {
       toast(t('importFailed'));
     }
@@ -3415,14 +3510,20 @@ async function init() {
   await refreshEvents();
   await refreshCategories();
 
-  // One-time demo seed: ONLY when no stored data exists. Never overwrites.
-  if (StorageService.wasFresh) {
-    await DataService.importAll(buildDemoEvents());
-    await refreshEvents();
-  }
   if (StorageService.categoriesFresh) {
     await DataService.saveCategories(DEFAULT_CATEGORIES.map(normalizeCategory));
     await refreshCategories();
+  }
+
+  // A Shortcut URL is consumed before demo seeding. On a first launch, a valid
+  // import therefore becomes the user's initial dataset instead of being mixed
+  // with sample records.
+  await importFromShortcutURL();
+
+  // One-time demo seed: ONLY when no stored/imported data exists. Never overwrites.
+  if (StorageService.wasFresh) {
+    await DataService.importAll(buildDemoEvents());
+    await refreshEvents();
   }
 
   applyStaticTranslations();
