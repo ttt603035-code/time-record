@@ -12,11 +12,14 @@ no sidebar, no dashboard, no StudyHub navigation.
 
 ## Files
 
-| File         | Purpose                                                        |
-| ------------ | -------------------------------------------------------------- |
-| `index.html` | Markup — screens, tab bar, sheet/dialog/toast containers        |
-| `styles.css` | All styling — design tokens, components, responsive rules       |
-| `app.js`     | Logic — modular sections (see the banner comments inside)       |
+| File / directory       | Purpose                                                        |
+| ---------------------- | -------------------------------------------------------------- |
+| `index.html`           | Markup — screens, tab bar, sheet/dialog/toast containers       |
+| `styles.css`           | All styling — design tokens, components, responsive rules      |
+| `app.js`               | Logic — modular sections (see the banner comments inside)      |
+| `manifest.webmanifest` | Installable-web-app metadata and icon declarations             |
+| `icons/`               | App icons cropped and resized from `IMG_7816.jpeg`              |
+| `tools/make_icons.py`  | Reproducible center-crop/resize tool (never redraws the source) |
 
 ## Code organisation (`app.js`)
 
@@ -111,24 +114,23 @@ UI (render functions)
 
 Any static host works. Example — GitHub Pages:
 
-1. Create a repository, push the three files (plus this README).
-2. Repository → **Settings → Pages → Source: Deploy from a branch → main → / (root)**.
-3. Your app is served at `https://<user>.github.io/<repo>/`.
+1. Merge the finished pull request into `main`.
+2. Open the repository's **Settings → Pages**.
+3. Under **Build and deployment**, choose **Source: Deploy from a branch**,
+   then **Branch: main**, folder **/ (root)**, and click **Save**.
+4. Wait for the Pages deployment to finish. This repository is served at
+   `https://ttt603035-code.github.io/time-record/`.
 
-Then **always open that same URL**. localStorage is scoped to the origin, so
+Then **always open that same URL**. `localStorage` is scoped to the origin, so
 every launch — page reload, Safari reopen, or a Shortcut that opens the URL —
-shows the same data.
+shows the same data. On iPhone, use Safari's **Share → Add to Home Screen** to
+install it with the icon generated from `IMG_7816.jpeg`.
 
-### Apple Shortcuts (future)
+### Local-first and backend-ready
 
-The plan:
-
-1. Shortcut collects info → builds JSON → sends it to a backend/API
-2. Backend stores the event (Supabase)
-3. The app reads from Supabase via `DataService`
-
-The current version is fully local and needs **no backend**. The architecture
-(UI → `DataService` → provider) is already shaped so Supabase can replace
+The current version is fully local and needs **no backend**. Apple Shortcuts can
+import an event immediately by opening the URL described below. The architecture
+(UI → `DataService` → provider) remains shaped so Supabase can later replace
 `StorageService` without rewriting the UI.
 
 ## Controls
@@ -179,33 +181,51 @@ individual records — no invented grouping, no duplicated statistics.
 
 ## Importing from Shortcuts
 
-The Shortcut flow you'll use later (reading your phone's Calendar and
-importing events):
+### One-tap URL import
 
-1. In Shortcuts, use **Find Calendar Events** to gather events.
-2. Build a JSON array with this schema (the app is lenient — only `date` and
-   `title` are required, everything else is optional and defaults are filled in):
+1. In Shortcuts, build one event as JSON. Only `date` and `title` are required;
+   omitted fields receive safe defaults:
 
    ```json
-   [
-     {
-       "date": "2026-08-16",
-       "startTime": "09:00",
-       "endTime": "10:30",
-       "title": "CET-6 Reading",
-       "category": "English",
-       "color": "blue",
-       "note": ""
-     }
-   ]
+   {
+     "date": "2026-08-16",
+     "startTime": "09:00",
+     "endTime": "10:30",
+     "title": "CET-6 Reading",
+     "category": "English",
+     "color": "blue",
+     "note": ""
+   }
    ```
 
-3. Save it as a file (e.g. `calendar.json`) and tap **More → Data → Import**.
-4. The same guide is available in-app: **More → Import from Shortcuts**.
+2. URL-encode the JSON text, append it to the stable Pages URL as the `import`
+   query value, and use Shortcuts' **Open URLs** action:
 
-`color` ∈ `blue | purple | pink | green | orange`. Categories that don't exist
-yet are shown as "Uncategorized" in Insights — add them under **Event Templates**
-to give them a color.
+   ```text
+   https://ttt603035-code.github.io/time-record/?import=<URL-encoded JSON>
+   ```
 
-Later, a Supabase backend will let the Shortcut send events automatically; the
-data layer (UI → `DataService` → provider) is already architected for that.
+3. The app imports the record into `localStorage`, updates every view, shows a
+   result toast, and removes `import` from the address so a refresh cannot add
+   the same no-ID record again. A single object, an array, and
+   `{ "events": [...] }` / `{ "data": [...] }` envelopes are all accepted.
+
+For larger batches, save the same JSON as a file and use
+**More → Data → Import**. If records include stable `id` values, importing that
+ID again updates it instead of creating a duplicate.
+
+`color` ∈ `blue | purple | pink | green | orange`. Categories that do not have
+an Event Template still appear in Insights using the event's color; add them
+under **Event Templates** to manage their shared color.
+
+## Rebuilding the app icons
+
+Run the committed tool whenever the source image changes:
+
+```bash
+python3 tools/make_icons.py IMG_7816.jpeg
+```
+
+The tool only applies EXIF orientation, a centered square crop, and high-quality
+resizing. It does not redraw, filter, decorate, or round the source artwork.
+It uses Pillow when installed and otherwise falls back to ImageMagick.
