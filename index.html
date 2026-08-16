@@ -1,0 +1,126 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="theme-color" content="#FFFFFF" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+  <meta name="apple-mobile-web-app-title" content="Calendar" />
+  <title>Calendar</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <div class="app" id="app">
+
+    <!-- ───────────────────────── SCREEN: CALENDAR ───────────────────────── -->
+    <main class="screen is-active" id="screen-calendar" aria-label="Calendar">
+
+      <header class="topbar">
+        <h1 class="page-title" data-i18n="calendar">Calendar</h1>
+        <button class="today-link" id="btnTodayTop" type="button" data-i18n="today">Today</button>
+      </header>
+
+      <div class="month-nav" role="group" aria-label="Month navigation">
+        <button class="icon-btn" id="monthNavPrev" type="button" aria-label="Previous month">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 6l-6 6 6 6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </button>
+        <button class="month-title" id="monthTitleBtn" type="button" aria-haspopup="dialog" aria-label="Select month and year">
+          <span id="monthTitleText">August 2026</span>
+          <svg class="chevron-down" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 9l6 6 6-6" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </button>
+        <button class="icon-btn" id="monthNavNext" type="button" aria-label="Next month">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 6l6 6-6 6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </button>
+      </div>
+
+      <section class="calendar-surface" aria-label="Calendar grid">
+        <div class="weekday-header" id="weekdayHeader" role="row"></div>
+        <div class="grid-viewport" id="gridViewport">
+          <div class="calendar-grid" id="calendarGrid" role="grid"></div>
+        </div>
+      </section>
+
+      <section class="day-detail" id="dayDetail" aria-label="Selected day">
+        <div class="day-detail-head">
+          <h2 class="day-label" id="dayLabel">Sunday, August 16</h2>
+          <button class="add-btn" id="btnAddDay" type="button" aria-label="Add event for this day">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/></svg>
+          </button>
+        </div>
+        <div class="events-list" id="eventsList"></div>
+      </section>
+
+    </main>
+
+    <!-- ───────────────────────── SCREEN: TODAY ───────────────────────── -->
+    <main class="screen" id="screen-today" aria-label="Today" hidden>
+      <header class="topbar">
+        <h1 class="page-title" data-i18n="today">Today</h1>
+        <button class="add-btn" id="btnAddToday" type="button" aria-label="Add event for today">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/></svg>
+        </button>
+      </header>
+
+      <div class="today-hero">
+        <h2 class="today-date" id="todayDate">Saturday, August 16</h2>
+        <div class="today-meta" id="todayMeta"></div>
+      </div>
+
+      <div class="events-list" id="todayList"></div>
+    </main>
+
+    <!-- ───────────────────────── SCREEN: INSIGHTS ───────────────────────── -->
+    <main class="screen" id="screen-insights" aria-label="Insights" hidden>
+      <header class="topbar">
+        <h1 class="page-title" data-i18n="insights">Insights</h1>
+      </header>
+
+      <div class="insights-seg" id="insightsSeg" role="tablist"></div>
+      <div class="insights-period" id="insightsPeriod"></div>
+      <div class="insights-body" id="insightsBody"></div>
+    </main>
+
+    <!-- ───────────────────────── SCREEN: MORE ───────────────────────── -->
+    <main class="screen" id="screen-more" aria-label="More" hidden>
+      <header class="topbar">
+        <h1 class="page-title" data-i18n="more">More</h1>
+      </header>
+
+      <div class="more-groups" id="moreGroups"></div>
+    </main>
+
+    <!-- ───────────────────────── BOTTOM TAB BAR ───────────────────────── -->
+    <nav class="tabbar" aria-label="Primary">
+      <div class="tabbar-capsule">
+        <span class="tabbar-indicator" id="tabIndicator" aria-hidden="true"></span>
+        <button class="tab-item is-active" type="button" data-tab="calendar" aria-label="Calendar" aria-current="page">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3.5" y="5" width="17" height="15.5" rx="3.5" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M3.5 9.5h17" stroke="currentColor" stroke-width="1.8"/><path d="M8.2 2.8v3.4M15.8 2.8v3.4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/><circle cx="8.6" cy="13.4" r="1.2" fill="currentColor"/><circle cx="12" cy="13.4" r="1.2" fill="currentColor"/><circle cx="15.4" cy="13.4" r="1.2" fill="currentColor"/></svg>
+          <span class="tab-label" data-i18n="calendar">Calendar</span>
+        </button>
+        <button class="tab-item" type="button" data-tab="today" aria-label="Today">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8.5" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M12 7.5V12l3 2" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          <span class="tab-label" data-i18n="today">Today</span>
+        </button>
+        <button class="tab-item" type="button" data-tab="insights" aria-label="Insights">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 19.5h16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/><rect x="5.5" y="11" width="3.2" height="7" rx="1.1" fill="none" stroke="currentColor" stroke-width="1.8"/><rect x="10.4" y="6" width="3.2" height="12" rx="1.1" fill="none" stroke="currentColor" stroke-width="1.8"/><rect x="15.3" y="9" width="3.2" height="9" rx="1.1" fill="none" stroke="currentColor" stroke-width="1.8"/></svg>
+          <span class="tab-label" data-i18n="insights">Insights</span>
+        </button>
+        <button class="tab-item" type="button" data-tab="more" aria-label="More">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="5.5" cy="12" r="1.5" fill="currentColor"/><circle cx="12" cy="12" r="1.5" fill="currentColor"/><circle cx="18.5" cy="12" r="1.5" fill="currentColor"/></svg>
+          <span class="tab-label" data-i18n="more">More</span>
+        </button>
+      </div>
+    </nav>
+
+  </div>
+
+  <!-- Overlay container: sheets, dialogs, modals, toast render here -->
+  <div id="overlays" aria-live="polite"></div>
+  <div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+  <input type="file" id="importFile" accept="application/json,.json" hidden />
+
+  <script src="app.js"></script>
+</body>
+</html>

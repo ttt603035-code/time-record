@@ -1,0 +1,2896 @@
+/* ============================================================
+   Calendar — a mobile-first, Apple-style calendar app
+   ------------------------------------------------------------
+   Architecture notes (see README.md for the full map):
+
+     UI (this file, render functions)
+       └── DataService  (facade — the ONLY data access point)
+             └── StorageService  (localStorage backend today)
+                   └── future: Supabase (swap provider only)
+
+   The event schema is intentionally stable & simple so that a
+   future Apple Shortcuts pipeline can write the same JSON:
+
+     { id, date, startTime, endTime, title, category, color,
+       note, createdAt, updatedAt }
+
+   ============================================================ */
+
+'use strict';
+
+/* ============================================================
+   1. CONSTANTS & CONFIG
+   ============================================================ */
+
+const STORAGE_KEY = 'calendar_events_v1';
+const CATEGORY_KEY = 'calendar_categories_v1';
+const SETTINGS_KEY = 'calendar_settings_v1';
+
+const MONTHS_SHORT = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+const MONTHS_LONG = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+const WEEKDAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+
+const EVENT_COLORS = {
+  blue: '#6FA8DC',
+  purple: '#B49BD9',
+  pink: '#F0A3B6',
+  green: '#86C79B',
+  orange: '#F1B973',
+};
+const COLOR_ORDER = ['blue', 'purple', 'pink', 'green', 'orange'];
+
+const ITEM_H = 40; // wheel picker item height (px)
+
+const ZH_WEEKDAYS = ['一', '二', '三', '四', '五', '六', '日'];
+
+/* ============================================================
+   1b. I18N  (English / 中文)
+   ============================================================ */
+
+const I18N = {
+  en: {
+    calendar: 'Calendar', today: 'Today', insights: 'Insights', more: 'More',
+    selectDate: 'Select Date', prevMonth: 'Previous month', nextMonth: 'Next month',
+    prevYear: 'Previous year', nextYear: 'Next year',
+    noEvents: 'No events', addEventCta: 'Add event', todayChip: 'Today', nowChip: 'Now',
+    eventsChip: '%n events', oneEventChip: '1 event', noEventsChip: 'No events',
+    data: 'Data', dataDesc: 'Export, import or clear the events stored on this device.',
+    events: 'Events', templates: 'Templates', size: 'Size',
+    export: 'Export', import: 'Import', clearAll: 'Clear all',
+    storageKeys: 'Storage keys', key: 'Key', entries: 'Entries',
+    about: 'About', aboutDesc: 'Calendar v1.0 — a local-first calendar.',
+    eventTemplates: 'Event Templates', templatesDefined: '%n defined',
+    storage: 'Storage', onThisDevice: 'On this device', limitedPreview: 'Limited (preview)',
+    aboutCalendar: 'About Calendar', version: 'v1.0',
+    language: 'Language', languageDesc: 'Switch the interface language.',
+    english: 'English', chinese: '中文',
+    cancel: 'Cancel', done: 'Done', save: 'Save', add: 'Add', delete: 'Delete', clear: 'Clear',
+    addEvent: 'Add Event', newEvent: 'New Event', editEvent: 'Edit Event',
+    title: 'Title', date: 'Date', start: 'Start', end: 'End', category: 'Category', color: 'Color', note: 'Note',
+    titlePlaceholder: 'e.g. CET-6 Reading', categoryPlaceholder: 'e.g. English', notePlaceholder: 'Optional',
+    titleRequired: 'Please enter a title.',
+    deleteEvent: 'Delete Event', deleteEventTitle: 'Delete event?', deleteEventMsg: 'will be permanently removed.',
+    eventSaved: 'Event saved', eventAdded: 'Event added', eventDeleted: 'Event deleted',
+    clearAllTitle: 'Clear all data?', clearAllMsg: 'All events on this device will be permanently removed.',
+    dataCleared: 'All data cleared',
+    exported: 'Exported %n events', noExport: 'No events to export', imported: 'Imported %n events', importFailed: 'Import failed — not valid JSON',
+    newTemplate: 'New Template', editTemplate: 'Edit Template', addTemplate: 'Add Template',
+    name: 'Name', namePlaceholder: 'e.g. English',
+    templatesHint: 'Templates appear as quick picks when adding an event.',
+    noTemplates: 'No templates yet. Add one to reuse it when creating events.',
+    templateSaved: 'Template saved', templateAdded: 'Template added', templateDeleted: 'Template deleted',
+    deleteTemplateTitle: 'Delete template?', deleteTemplateMsg: 'will be removed. Existing events keep their color.',
+    eventsUsed: '%n events', oneEventUsed: '1 event',
+    storageMsg: 'Backend: localStorage\n\ncalendar_events_v1 — %n events (%s)\ncalendar_categories_v1 — %m templates\n\n%mode',
+    aboutMsg: 'Version 1.0 — a local-first calendar.\n\nData is stored on this device. The data layer is architected for a future Supabase backend and Apple Shortcuts import.',
+    segDay: 'Day', segWeek: 'Week', segMonth: 'Month', segYear: 'Year',
+    importGuide: 'Import from Shortcuts',
+    importGuideDesc: 'Have your Shortcut build this JSON, save it as a file, then tap Import.',
+    importGuideNote: 'Later, a backend (Supabase) will let the Shortcut send events automatically — the data layer is already ready for it.',
+    dayBlocks: 'Time Blocks', dayPie: 'Category Share',
+    timeDistribution: 'Time Distribution', weekBlocks: 'Week Blocks', dailyHours: 'Daily Hours',
+    activity: 'Activity', activeTrend: 'Activity Trend',
+    totalEvents: 'Total Events', activeDays: 'Active Days', totalHours: 'Total Hours', busiestDay: 'Busiest Day',
+    noData: 'No data for this period', hoursUnit: 'h',
+    monthTrend: 'Events per day', yearTrend: 'Events per month',
+  },
+  zh: {
+    calendar: '日历', today: '今天', insights: '洞悉', more: '更多',
+    selectDate: '选择日期', prevMonth: '上个月', nextMonth: '下个月',
+    prevYear: '上一年', nextYear: '下一年',
+    noEvents: '暂无日程', addEventCta: '添加日程', todayChip: '今天', nowChip: '现在',
+    eventsChip: '%n 个日程', oneEventChip: '1 个日程', noEventsChip: '暂无日程',
+    data: '数据', dataDesc: '导出、导入或清空此设备上保存的日程数据。',
+    events: '日程', templates: '模板', size: '大小',
+    export: '导出', import: '导入', clearAll: '清空全部',
+    storageKeys: '存储 Key', key: 'Key', entries: '条目',
+    about: '关于', aboutDesc: 'Calendar v1.0 — 本地优先的日历。',
+    eventTemplates: '日程模板', templatesDefined: '已定义 %n 个',
+    storage: '存储', onThisDevice: '此设备', limitedPreview: '受限（预览）',
+    aboutCalendar: '关于 Calendar', version: 'v1.0',
+    language: '语言', languageDesc: '切换界面语言。',
+    english: 'English', chinese: '中文',
+    cancel: '取消', done: '完成', save: '保存', add: '添加', delete: '删除', clear: '清空',
+    addEvent: '添加日程', newEvent: '新建日程', editEvent: '编辑日程',
+    title: '标题', date: '日期', start: '开始', end: '结束', category: '分类', color: '颜色', note: '备注',
+    titlePlaceholder: '例如：CET-6 阅读', categoryPlaceholder: '例如：英语', notePlaceholder: '可选',
+    titleRequired: '请输入标题。',
+    deleteEvent: '删除日程', deleteEventTitle: '删除日程？', deleteEventMsg: '将被永久移除。',
+    eventSaved: '已保存', eventAdded: '已添加', eventDeleted: '已删除',
+    clearAllTitle: '清空全部数据？', clearAllMsg: '此设备上的所有日程将被永久移除。',
+    dataCleared: '已清空全部数据',
+    exported: '已导出 %n 个日程', noExport: '没有可导出的日程', imported: '已导入 %n 个日程', importFailed: '导入失败 — JSON 无效',
+    newTemplate: '新建模板', editTemplate: '编辑模板', addTemplate: '添加模板',
+    name: '名称', namePlaceholder: '例如：英语',
+    templatesHint: '模板会在添加日程时作为快捷选项出现。',
+    noTemplates: '暂无模板。添加一个以便在创建日程时复用。',
+    templateSaved: '模板已保存', templateAdded: '模板已添加', templateDeleted: '模板已删除',
+    deleteTemplateTitle: '删除模板？', deleteTemplateMsg: '将被移除。已有日程会保留其颜色。',
+    eventsUsed: '%n 个日程', oneEventUsed: '1 个日程',
+    storageMsg: '后端：localStorage\n\ncalendar_events_v1 — %n 个日程（%s）\ncalendar_categories_v1 — %m 个模板\n\n%mode',
+    aboutMsg: '版本 1.0 — 本地优先的日历。\n\n数据存储在此设备上。数据层已为未来的 Supabase 后端与 Apple Shortcuts 导入做好架构。',
+    segDay: '日', segWeek: '周', segMonth: '月', segYear: '年',
+    importGuide: '从快捷指令导入',
+    importGuideDesc: '让快捷指令生成如下 JSON，保存为文件后点击「导入」。',
+    importGuideNote: '后续接入 Supabase 后端后，快捷指令即可自动写入日程 — 数据层已为此做好准备。',
+    dayBlocks: '时间块', dayPie: '分类占比',
+    timeDistribution: '时间分布', weekBlocks: '一周时间块', dailyHours: '每日时长',
+    activity: '活动', activeTrend: '活跃趋势',
+    totalEvents: '总日程', activeDays: '活跃天数', totalHours: '总时长', busiestDay: '最活跃日',
+    noData: '该时段暂无数据', hoursUnit: '小时',
+    monthTrend: '每日日程数', yearTrend: '每月日程数',
+  },
+};
+
+function t(key, vars) {
+  let s = (I18N[appLang] && I18N[appLang][key]) ? I18N[appLang][key] : (I18N.en[key] || key);
+  if (vars) Object.keys(vars).forEach((k) => { s = s.split('%' + k).join(vars[k]); });
+  return s;
+}
+
+function monthName(m, long) {
+  if (appLang === 'zh') return (m + 1) + '月';
+  return long ? MONTHS_LONG[m] : MONTHS_SHORT[m];
+}
+
+function weekdayName(i) { // i: 0 = Monday
+  return appLang === 'zh' ? '周' + ZH_WEEKDAYS[i] : WEEKDAYS[i];
+}
+
+function formatDayLabel(iso) {
+  const { y, m, d } = parseISO(iso);
+  if (appLang === 'zh') {
+    const wd = (new Date(y, m, d).getDay() + 6) % 7;
+    return (m + 1) + '月' + d + '日 ' + '星期' + ZH_WEEKDAYS[wd];
+  }
+  return new Intl.DateTimeFormat('en-US', { weekday: 'long', month: 'long', day: 'numeric' })
+    .format(new Date(y, m, d));
+}
+
+function formatShortDate(iso) {
+  const { y, m, d } = parseISO(iso);
+  return appLang === 'zh' ? (m + 1) + '月' + d + '日' : MONTHS_SHORT[m] + ' ' + d + ', ' + y;
+}
+
+/* ============================================================
+   2. DATE UTILS
+   ============================================================ */
+
+const pad2 = (n) => String(n).padStart(2, '0');
+
+function isoDate(y, m, d) {
+  return y + '-' + pad2(m + 1) + '-' + pad2(d);
+}
+
+function parseISO(iso) {
+  const [y, m, d] = String(iso).split('-').map(Number);
+  return { y, m: m - 1, d };
+}
+
+function daysInMonth(y, m) {
+  return new Date(y, m + 1, 0).getDate();
+}
+
+function todayISO() {
+  const n = new Date();
+  return isoDate(n.getFullYear(), n.getMonth(), n.getDate());
+}
+
+function addDaysISO(iso, n) {
+  const { y, m, d } = parseISO(iso);
+  const dt = new Date(y, m, d + n);
+  return isoDate(dt.getFullYear(), dt.getMonth(), dt.getDate());
+}
+
+function formatLong(iso) {
+  const { y, m, d } = parseISO(iso);
+  return new Intl.DateTimeFormat('en-US', { weekday: 'long', month: 'long', day: 'numeric' })
+    .format(new Date(y, m, d));
+}
+
+function formatShort(iso) {
+  const { y, m, d } = parseISO(iso);
+  return MONTHS_SHORT[m] + ' ' + d + ', ' + y;
+}
+
+function toMinutes(hhmm) {
+  const [h, m] = hhmm.split(':').map(Number);
+  return h * 60 + m;
+}
+
+function currentMinutes() {
+  const n = new Date();
+  return n.getHours() * 60 + n.getMinutes();
+}
+
+function addMinutes(hhmm, mins) {
+  const [h, m] = hhmm.split(':').map(Number);
+  let total = h * 60 + m + mins;
+  if (total > 23 * 60 + 55) total = 23 * 60 + 55;
+  return pad2(Math.floor(total / 60)) + ':' + pad2(total % 60);
+}
+
+function validTime(t) {
+  return typeof t === 'string' && /^([01]\d|2[0-3]):[0-5]\d$/.test(t);
+}
+
+function validDate(d) {
+  if (typeof d !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(d)) return false;
+  const { y, m, dd } = parseISO(d);
+  const dt = new Date(y, m, dd);
+  return dt.getFullYear() === y && dt.getMonth() === m && dt.getDate() === dd;
+}
+
+/* ============================================================
+   3. EVENT MODEL
+   ============================================================ */
+
+function genId() {
+  return 'evt_' + Date.now().toString(36) + '_' + Math.random().toString(36).slice(2, 8);
+}
+
+/** Normalize any incoming event object into the stable schema. */
+function normalizeEvent(e) {
+  const now = new Date().toISOString();
+  return {
+    id: (typeof e.id === 'string' && e.id) ? e.id : genId(),
+    date: validDate(e.date) ? e.date : todayISO(),
+    startTime: validTime(e.startTime) ? e.startTime : '09:00',
+    endTime: validTime(e.endTime) ? e.endTime : '10:00',
+    title: (typeof e.title === 'string' && e.title.trim()) ? e.title.trim() : 'Untitled',
+    category: typeof e.category === 'string' ? e.category : '',
+    color: EVENT_COLORS[e.color] ? e.color : 'blue',
+    note: typeof e.note === 'string' ? e.note : '',
+    createdAt: typeof e.createdAt === 'string' ? e.createdAt : now,
+    updatedAt: typeof e.updatedAt === 'string' ? e.updatedAt : now,
+  };
+}
+
+/** Accepts an array or an envelope {events:[...]} — used by import & future Shortcuts. */
+function normalizeImport(data) {
+  let list = null;
+  if (Array.isArray(data)) list = data;
+  else if (data && typeof data === 'object') {
+    if (Array.isArray(data.events)) list = data.events;
+    else if (Array.isArray(data.data)) list = data.data;
+  }
+  if (!list) return [];
+  return list
+    .map((item) => {
+      if (!item || typeof item !== 'object') return null;
+      if (!item.date && !item.title) return null;
+      return normalizeEvent(item);
+    })
+    .filter(Boolean);
+}
+
+/** Category ("event template") model. */
+function normalizeCategory(c) {
+  return {
+    id: (typeof c.id === 'string' && c.id) ? c.id : 'cat_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6),
+    name: (typeof c.name === 'string' && c.name.trim()) ? c.name.trim() : 'Untitled',
+    color: EVENT_COLORS[c.color] ? c.color : 'blue',
+  };
+}
+
+const DEFAULT_CATEGORIES = [
+  { id: 'cat_english', name: 'English', color: 'blue' },
+  { id: 'cat_chinese', name: 'Chinese', color: 'purple' },
+  { id: 'cat_work', name: 'Work', color: 'orange' },
+  { id: 'cat_health', name: 'Health', color: 'green' },
+  { id: 'cat_personal', name: 'Personal', color: 'pink' },
+  { id: 'cat_study', name: 'Study', color: 'blue' },
+];
+
+/* ============================================================
+   4. STORAGE SERVICE  (localStorage backend)
+   ------------------------------------------------------------
+   The single place that touches persistence. The UI never calls
+   localStorage directly. Replacing this with a Supabase provider
+   later means implementing the same methods — nothing else changes.
+   ============================================================ */
+
+const StorageService = (() => {
+  const KEY = STORAGE_KEY;
+  const BACKUP_PREFIX = 'calendar_events_v1_backup_';
+
+  let available = true;
+  let corrupt = false;
+  let wasFresh = false;
+  let memoryEvents = null; // in-memory fallback when localStorage is unavailable
+
+  // Probe once. Sandboxed previews / private mode can throw SecurityError.
+  function probeLocalStorage() {
+    try {
+      const t = '__calendar_probe__';
+      window.localStorage.setItem(t, '1');
+      window.localStorage.removeItem(t);
+      return window.localStorage;
+    } catch (err) {
+      available = false;
+      return null;
+    }
+  }
+  const ls = probeLocalStorage();
+
+  function readRaw() {
+    if (!ls) return null;
+    try { return ls.getItem(KEY); } catch (err) { return null; }
+  }
+
+  function parse(raw) {
+    if (raw === null) return { events: [], fresh: true };
+    try {
+      const data = JSON.parse(raw);
+      if (Array.isArray(data)) return { events: data, fresh: false };
+      if (data && Array.isArray(data.events)) return { events: data.events, fresh: false };
+      return { events: [], fresh: false };
+    } catch (err) {
+      // Corrupted payload: never silently destroy it — keep a backup copy.
+      corrupt = true;
+      try { ls.setItem(BACKUP_PREFIX + Date.now(), raw); } catch (e) { /* ignore */ }
+      return { events: [], fresh: true };
+    }
+  }
+
+  async function getEvents() {
+    if (memoryEvents) return memoryEvents.slice();
+    if (!ls) {
+      memoryEvents = [];
+      wasFresh = true;
+      return [];
+    }
+    const raw = readRaw();
+    const { events, fresh } = parse(raw);
+    if (fresh) wasFresh = true;
+    memoryEvents = events.map(normalizeEvent);
+    return memoryEvents.slice();
+  }
+
+  async function saveEvents(events) {
+    memoryEvents = events.map(normalizeEvent);
+    if (!ls) return false;
+    try {
+      ls.setItem(KEY, JSON.stringify({ version: 1, events: memoryEvents }));
+      return true;
+    } catch (err) {
+      return false; // quota or write failure — data stays in memory this session
+    }
+  }
+
+  async function addEvent(event) {
+    const events = await getEvents();
+    events.push(normalizeEvent(event));
+    await saveEvents(events);
+    return event;
+  }
+
+  async function updateEvent(event) {
+    const ev = normalizeEvent(event);
+    const events = await getEvents();
+    const i = events.findIndex((x) => x.id === ev.id);
+    if (i >= 0) events[i] = ev; else events.push(ev);
+    await saveEvents(events);
+    return ev;
+  }
+
+  async function deleteEvent(id) {
+    const events = await getEvents();
+    await saveEvents(events.filter((x) => x.id !== id));
+    return true;
+  }
+
+  async function importEvents(data) {
+    const events = await getEvents();
+    const incoming = normalizeImport(data);
+    const map = new Map(events.map((x) => [x.id, x]));
+    let added = 0, updated = 0;
+    incoming.forEach((ev) => {
+      if (map.has(ev.id)) updated++; else added++;
+      map.set(ev.id, ev);
+    });
+    await saveEvents([...map.values()]);
+    return { added, updated };
+  }
+
+  async function exportEvents() {
+    return await getEvents();
+  }
+
+  async function clearAll() {
+    memoryEvents = [];
+    if (ls) { try { ls.removeItem(KEY); } catch (err) { /* ignore */ } }
+    return true;
+  }
+
+  // ── Categories (event templates) ──
+  let memoryCategories = null;
+  let categoriesFresh = false;
+
+  async function getCategories() {
+    if (memoryCategories) return memoryCategories.slice();
+    if (!ls) { memoryCategories = []; categoriesFresh = true; return []; }
+    let raw = null;
+    try { raw = ls.getItem(CATEGORY_KEY); } catch (err) { raw = null; }
+    if (raw === null) {
+      memoryCategories = [];
+      categoriesFresh = true;
+      return [];
+    }
+    try {
+      const arr = JSON.parse(raw);
+      memoryCategories = Array.isArray(arr) ? arr.map(normalizeCategory) : [];
+      categoriesFresh = false;
+    } catch (err) {
+      memoryCategories = [];
+      categoriesFresh = true;
+    }
+    return memoryCategories.slice();
+  }
+
+  async function saveCategories(list) {
+    memoryCategories = list.map(normalizeCategory);
+    if (!ls) return false;
+    try { ls.setItem(CATEGORY_KEY, JSON.stringify(memoryCategories)); return true; } catch (err) { return false; }
+  }
+
+  function backupKeys() {
+    if (!ls) return [];
+    const out = [];
+    for (let i = 0; i < ls.length; i++) {
+      let k = null;
+      try { k = ls.key(i); } catch (err) { continue; }
+      if (k && k.indexOf('calendar_events_v1_backup_') === 0) out.push(k);
+    }
+    return out;
+  }
+
+  // ── Settings (UI preferences, e.g. language) ──
+  let memorySettings = null;
+
+  async function getSetting(key) {
+    if (memorySettings) return memorySettings[key];
+    if (!ls) { memorySettings = {}; return undefined; }
+    let raw = null;
+    try { raw = ls.getItem(SETTINGS_KEY); } catch (err) { raw = null; }
+    let obj = {};
+    if (raw) { try { obj = JSON.parse(raw) || {}; } catch (err) { obj = {}; } }
+    memorySettings = obj;
+    return obj[key];
+  }
+
+  async function setSetting(key, value) {
+    if (memorySettings === null) await getSetting('__init__');
+    memorySettings[key] = value;
+    if (ls) { try { ls.setItem(SETTINGS_KEY, JSON.stringify(memorySettings)); } catch (err) { /* ignore */ } }
+    return true;
+  }
+
+  return {
+    getEvents,
+    saveEvents,
+    addEvent,
+    updateEvent,
+    deleteEvent,
+    importEvents,
+    exportEvents,
+    clearAll,
+    getCategories,
+    saveCategories,
+    backupKeys,
+    getSetting,
+    setSetting,
+    get available() { return available; },
+    get corrupt() { return corrupt; },
+    get wasFresh() { return wasFresh; },
+    get categoriesFresh() { return categoriesFresh; },
+  };
+})();
+
+/* ============================================================
+   5. DATA SERVICE  (facade — future Supabase swap point)
+   ------------------------------------------------------------
+   The UI depends only on DataService. Today every method simply
+   forwards to StorageService. To move to Supabase, re-implement
+   these methods against the Supabase client — the UI stays intact.
+   ============================================================ */
+
+const DataService = {
+  fetchAll: () => StorageService.getEvents(),
+  create: (event) => StorageService.addEvent(event),
+  update: (event) => StorageService.updateEvent(event),
+  remove: (id) => StorageService.deleteEvent(id),
+  importAll: (data) => StorageService.importEvents(data),
+  exportAll: () => StorageService.exportEvents(),
+  clear: () => StorageService.clearAll(),
+  fetchCategories: () => StorageService.getCategories(),
+  saveCategories: (list) => StorageService.saveCategories(list),
+  getSetting: (key) => StorageService.getSetting(key),
+  setSetting: (key, value) => StorageService.setSetting(key, value),
+};
+
+/* ============================================================
+   6. APP STATE
+   ============================================================ */
+
+let appLang = 'en'; // 'en' | 'zh'
+
+const state = {
+  viewYear: new Date().getFullYear(),
+  viewMonth: new Date().getMonth(),
+  selectedDate: todayISO(),
+  events: [],
+  categories: [],
+  tab: 'calendar',
+};
+
+// Insights period state
+const insights = (() => {
+  const n = new Date();
+  return {
+    mode: 'day', // 'day' | 'week' | 'month' | 'year'
+    year: n.getFullYear(),
+    month: n.getMonth(),
+    day: n.getDate(),
+  };
+})();
+
+/* ============================================================
+   7. DOM HELPERS
+   ============================================================ */
+
+const $ = (sel, root) => (root || document).querySelector(sel);
+const overlays = document.getElementById('overlays');
+
+function el(tag, className, text) {
+  const n = document.createElement(tag);
+  if (className) n.className = className;
+  if (text !== undefined) n.textContent = text;
+  return n;
+}
+
+/* Inline SVG icons — SF-Symbol-like, no emoji. */
+const I = {
+  chevR: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 6l6 6-6 6" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+  chevDown: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 9l6 6 6-6" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+  chevLeft: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 6l-6 6 6 6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+  chevRight: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 6l6 6-6 6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+  x: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/></svg>',
+  check: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+  up: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 15V4M7.5 8.5L12 4l4.5 4.5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M4 15v2a3 3 0 0 0 3 3h10a3 3 0 0 0 3-3v-2" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>',
+  down: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4v11M7.5 10.5L12 15l4.5-4.5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M4 15v2a3 3 0 0 0 3 3h10a3 3 0 0 0 3-3v-2" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>',
+  trash: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><path d="M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><path d="M6.5 7l1 12a2 2 0 0 0 2 2h5a2 2 0 0 0 2-2l1-12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>',
+  db: '<svg viewBox="0 0 24 24" aria-hidden="true"><ellipse cx="12" cy="6" rx="7.5" ry="3.2" fill="none" stroke="currentColor" stroke-width="2"/><path d="M4.5 6v6c0 1.77 3.36 3.2 7.5 3.2s7.5-1.43 7.5-3.2V6" fill="none" stroke="currentColor" stroke-width="2"/><path d="M4.5 12v6c0 1.77 3.36 3.2 7.5 3.2s7.5-1.43 7.5-3.2v-6" fill="none" stroke="currentColor" stroke-width="2"/></svg>',
+  list: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 6h13M8 12h13M8 18h13" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><path d="M3.5 6h.01M3.5 12h.01M3.5 18h.01" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"/></svg>',
+  info: '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" stroke-width="2"/><path d="M12 11v5" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><path d="M12 8h.01" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"/></svg>',
+  pencil: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15.5 5.5l3 3L8 19H5v-3L15.5 5.5z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/><path d="M12.8 8.2l3 3" fill="none" stroke="currentColor" stroke-width="1.8"/></svg>',
+  tag: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 4h7.2a1 1 0 0 1 .7.3l8.8 8.8a1 1 0 0 1 0 1.4l-5.2 5.2a1 1 0 0 1-1.4 0l-8.8-8.8a1 1 0 0 1-.3-.7V4z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/><circle cx="9.5" cy="9.5" r="1.3" fill="currentColor"/></svg>',
+};
+
+const ICON_CALENDAR_EMPTY = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="3.5" y="5" width="17" height="15.5" rx="3.5"/><path d="M3.5 9.5h17"/><path d="M8.2 2.8v3.4M15.8 2.8v3.4"/></svg>';
+
+/* ============================================================
+   8. TOAST
+   ============================================================ */
+
+let toastTimer = null;
+function toast(msg) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.classList.add('is-visible');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => t.classList.remove('is-visible'), 2200);
+}
+
+/* ============================================================
+   9. ALERT DIALOG (Apple-style centered modal)
+   ============================================================ */
+
+function showDialog({ title, message, actions }) {
+  const overlay = el('div', 'overlay');
+  const dlg = el('div', 'dialog');
+  dlg.setAttribute('role', 'alertdialog');
+  dlg.setAttribute('aria-modal', 'true');
+  dlg.setAttribute('aria-label', title);
+
+  const body = el('div', 'dialog-body');
+  body.appendChild(el('div', 'dialog-title', title));
+  if (message) {
+    const m = el('div', 'dialog-message', message);
+    m.style.whiteSpace = 'pre-line';
+    body.appendChild(m);
+  }
+
+  const actionsEl = el('div', 'dialog-actions');
+  const prevFocus = document.activeElement;
+
+  function close() {
+    document.removeEventListener('keydown', onKey);
+    overlay.classList.remove('is-visible');
+    dlg.classList.remove('is-open');
+    setTimeout(() => {
+      overlay.remove();
+      dlg.remove();
+      if (prevFocus && prevFocus.focus) prevFocus.focus();
+    }, 200);
+  }
+
+  actions.forEach((a) => {
+    const b = el('button', a.danger ? 'is-danger' : '', a.label);
+    b.type = 'button';
+    b.addEventListener('click', () => { close(); if (a.onClick) a.onClick(); });
+    actionsEl.appendChild(b);
+  });
+
+  dlg.append(body, actionsEl);
+  overlay.addEventListener('click', close);
+
+  const onKey = (e) => { if (e.key === 'Escape') close(); };
+  document.addEventListener('keydown', onKey);
+
+  overlays.append(overlay, dlg);
+  requestAnimationFrame(() => {
+    overlay.classList.add('is-visible');
+    dlg.classList.add('is-open');
+  });
+  const first = actionsEl.querySelector('button');
+  if (first) first.focus();
+}
+
+/* ============================================================
+   10. BOTTOM SHEET
+   ============================================================ */
+
+let activeSheetApi = null;
+
+function openSheet({ title, body, footer, dismissible = true, onClose }) {
+  if (activeSheetApi) activeSheetApi.close();
+
+  const overlay = el('div', 'overlay');
+  const sheet = el('div', 'sheet');
+  sheet.setAttribute('role', 'dialog');
+  sheet.setAttribute('aria-modal', 'true');
+  sheet.setAttribute('aria-label', title);
+
+  const handle = el('div', 'sheet-handle');
+  handle.innerHTML = '<span></span>';
+
+  const header = el('div', 'sheet-header');
+  header.appendChild(el('div', 'sheet-title', title));
+  const closeBtn = el('button', 'sheet-close');
+  closeBtn.type = 'button';
+  closeBtn.setAttribute('aria-label', 'Close');
+  closeBtn.innerHTML = I.x;
+  header.appendChild(closeBtn);
+
+  const bodyEl = el('div', 'sheet-body');
+  bodyEl.appendChild(body);
+
+  sheet.append(handle, header, bodyEl);
+  if (footer) sheet.append(footer);
+
+  const prevFocus = document.activeElement;
+  let closed = false;
+
+  function close() {
+    if (closed) return;
+    closed = true;
+    activeSheetApi = null;
+    document.removeEventListener('keydown', onKey);
+    overlay.classList.remove('is-visible');
+    sheet.classList.remove('is-open');
+    setTimeout(() => {
+      overlay.remove();
+      sheet.remove();
+      if (onClose) onClose();
+      if (prevFocus && prevFocus.focus) prevFocus.focus();
+    }, 280);
+  }
+
+  overlay.addEventListener('click', () => { if (dismissible) close(); });
+  closeBtn.addEventListener('click', close);
+
+  const onKey = (e) => { if (e.key === 'Escape') close(); };
+  document.addEventListener('keydown', onKey);
+
+  enableDragToDismiss(sheet, handle, header, close);
+
+  overlays.append(overlay, sheet);
+  requestAnimationFrame(() => {
+    overlay.classList.add('is-visible');
+    sheet.classList.add('is-open');
+  });
+
+  const firstFocusable = body.querySelector('input, textarea, select, button');
+  if (firstFocusable) firstFocusable.focus();
+
+  const api = { close, el: sheet };
+  activeSheetApi = api;
+  return api;
+}
+
+function enableDragToDismiss(sheet, handle, header, close) {
+  let startY = 0;
+  let dragging = false;
+
+  const onDown = (e) => {
+    if (e.pointerType === 'mouse' && e.button !== 0) return;
+    dragging = true;
+    startY = e.clientY;
+    sheet.classList.add('dragging');
+    sheet.style.transition = 'none';
+    try { e.target.setPointerCapture(e.pointerId); } catch (err) { /* ignore */ }
+  };
+  const onMove = (e) => {
+    if (!dragging) return;
+    const dy = e.clientY - startY;
+    if (dy > 0) sheet.style.transform = 'translateX(-50%) translateY(' + dy + 'px)';
+  };
+  const onUp = (e) => {
+    if (!dragging) return;
+    dragging = false;
+    const dy = e.clientY - startY;
+    sheet.classList.remove('dragging');
+    sheet.style.transition = '';
+    if (dy > 130) {
+      close(); // keeps inline transform so the sheet slides out from its dragged position
+    } else {
+      sheet.style.transform = '';
+    }
+  };
+  const onCancel = () => {
+    dragging = false;
+    sheet.classList.remove('dragging');
+    sheet.style.transition = '';
+    sheet.style.transform = '';
+  };
+
+  [handle, header].forEach((t) => {
+    t.addEventListener('pointerdown', onDown);
+    t.addEventListener('pointermove', onMove);
+    t.addEventListener('pointerup', onUp);
+    t.addEventListener('pointercancel', onCancel);
+  });
+}
+
+/* ============================================================
+   10b. STUDYHUB-STYLE MODAL  (centered card popup)
+   ------------------------------------------------------------
+   Same visual language as StudyHub's sheet: soft blurred scrim,
+   centered white card, 16px radius, head/body/footer, close btn.
+   ============================================================ */
+
+const modalStack = [];
+
+function openStudyModal({ title, body, footer, dismissible = true, onClose }) {
+  const overlay = el('div', 'modal-overlay');
+  const modal = el('div', 'study-modal');
+  modal.setAttribute('role', 'dialog');
+  modal.setAttribute('aria-modal', 'true');
+  modal.setAttribute('aria-label', title);
+
+  const head = el('div', 'study-modal-head');
+  const titleEl = el('div', 'study-modal-title', title);
+  head.appendChild(titleEl);
+  const closeBtn = el('button', 'study-modal-close');
+  closeBtn.type = 'button';
+  closeBtn.setAttribute('aria-label', 'Close');
+  closeBtn.innerHTML = I.x;
+  head.appendChild(closeBtn);
+
+  const bodyEl = el('div', 'study-modal-body');
+  bodyEl.appendChild(body);
+  modal.append(head, bodyEl);
+  let footerEl = footer || null;
+  if (footerEl) modal.append(footerEl);
+
+  const prevFocus = document.activeElement;
+  let closed = false;
+
+  function close() {
+    if (closed) return;
+    closed = true;
+    const idx = modalStack.indexOf(api);
+    if (idx >= 0) modalStack.splice(idx, 1);
+    document.removeEventListener('keydown', onKey);
+    overlay.classList.remove('is-visible');
+    modal.classList.remove('is-open');
+    setTimeout(() => {
+      overlay.remove();
+      modal.remove();
+      if (onClose) onClose();
+      if (prevFocus && prevFocus.focus) prevFocus.focus();
+    }, 220);
+  }
+
+  overlay.addEventListener('click', () => { if (dismissible) close(); });
+  closeBtn.addEventListener('click', close);
+
+  const onKey = (e) => {
+    if (e.key === 'Escape' && modalStack[modalStack.length - 1] === api) close();
+  };
+  document.addEventListener('keydown', onKey);
+
+  overlays.append(overlay, modal);
+  requestAnimationFrame(() => {
+    overlay.classList.add('is-visible');
+    modal.classList.add('is-open');
+  });
+
+  const firstFocusable = body.querySelector('input, textarea, select, button');
+  if (firstFocusable) firstFocusable.focus();
+
+  const api = {
+    close,
+    el: modal,
+    get closed() { return closed; },
+    setContent(newBody, newFooter, newTitle) {
+      bodyEl.innerHTML = '';
+      bodyEl.appendChild(newBody);
+      if (newTitle) titleEl.textContent = newTitle;
+      if (footerEl) { footerEl.remove(); footerEl = null; }
+      if (newFooter) { footerEl = newFooter; modal.appendChild(newFooter); }
+      const f = bodyEl.querySelector('input, textarea, select, button');
+      if (f) f.focus();
+    },
+  };
+  modalStack.push(api);
+  return api;
+}
+
+/* ============================================================
+   11. WHEEL PICKER  (iOS-style columns for date & time)
+   ============================================================ */
+
+function buildWheelShell() {
+  const wheel = el('div', 'wheel');
+  wheel.innerHTML = '<div class="wheel-band"></div><div class="wheel-fade top"></div><div class="wheel-fade bottom"></div>';
+  return wheel;
+}
+
+function makeColumn(values, selectedValue, onSettle) {
+  const col = el('div', 'wheel-col');
+  col.tabIndex = 0;
+  col.setAttribute('role', 'spinbutton');
+
+  function index() {
+    const max = col.children.length - 1;
+    return Math.max(0, Math.min(max, Math.round(col.scrollTop / ITEM_H)));
+  }
+  function highlight() {
+    const sel = index();
+    Array.from(col.children).forEach((c, i) => c.classList.toggle('is-sel', i === sel));
+  }
+
+  function render(valuesArr) {
+    col.innerHTML = '';
+    valuesArr.forEach((v, i) => {
+      const it = el('div', 'wheel-item', v.label);
+      it.dataset.value = v.value;
+      it.addEventListener('click', () => col.scrollTo({ top: i * ITEM_H, behavior: 'smooth' }));
+      col.appendChild(it);
+    });
+  }
+
+  render(values);
+
+  let current = selectedValue;
+  col.addEventListener('scroll', () => {
+    highlight();
+    const val = col.children[index()].dataset.value;
+    if (val !== current) {
+      current = val;
+      onSettle(val);
+    }
+  });
+
+  col.addEventListener('keydown', (e) => {
+    if (e.key === 'ArrowUp' || e.key === 'ArrowDown') {
+      e.preventDefault();
+      let target = index() + (e.key === 'ArrowUp' ? -1 : 1);
+      target = Math.max(0, Math.min(col.children.length - 1, target));
+      col.scrollTo({ top: target * ITEM_H, behavior: 'smooth' });
+    }
+  });
+
+  function apply(value) {
+    const i = Array.from(col.children).findIndex((c) => c.dataset.value === String(value));
+    if (i >= 0) {
+      current = String(value);
+      col.scrollTop = i * ITEM_H;
+      highlight();
+    }
+  }
+  apply(selectedValue);
+
+  return {
+    col,
+    setSelected: apply,
+    rebuild(valuesArr, selectedValue2) {
+      render(valuesArr);
+      current = selectedValue2;
+      const i = Array.from(col.children).findIndex((c) => c.dataset.value === String(selectedValue2));
+      if (i >= 0) {
+        col.scrollTop = i * ITEM_H;
+        highlight();
+      }
+    },
+  };
+}
+
+function buildDateWheel(container, iso, onChange) {
+  const { y, m, d } = parseISO(iso);
+  const wheel = buildWheelShell();
+  let year = y, month = m, day = d;
+
+  const years = [];
+  for (let Y = 1970; Y <= 2075; Y++) years.push({ value: String(Y), label: String(Y) });
+
+  function dayValues(yy, mm) {
+    const n = daysInMonth(yy, mm);
+    const arr = [];
+    for (let i = 1; i <= n; i++) arr.push({ value: String(i), label: String(i) });
+    return arr;
+  }
+  function emit() { onChange(isoDate(year, month, day)); }
+  function syncDays() {
+    const n = daysInMonth(year, month);
+    if (day > n) day = n;
+    dayCol.rebuild(dayValues(year, month), String(day));
+  }
+
+  const dayCol = makeColumn(dayValues(year, month), String(day), (v) => { day = Number(v); emit(); });
+  const monCol = makeColumn(MONTHS_SHORT.map((name, i) => ({ value: String(i), label: name })), String(month), (v) => { month = Number(v); syncDays(); emit(); });
+  const yrCol = makeColumn(years, String(year), (v) => { year = Number(v); syncDays(); emit(); });
+
+  dayCol.col.style.minWidth = '62px';
+  monCol.col.style.minWidth = '110px';
+  yrCol.col.style.minWidth = '96px';
+  dayCol.col.setAttribute('aria-label', 'Day');
+  monCol.col.setAttribute('aria-label', 'Month');
+  yrCol.col.setAttribute('aria-label', 'Year');
+
+  wheel.append(dayCol.col, monCol.col, yrCol.col);
+  container.appendChild(wheel);
+  return wheel;
+}
+
+function buildTimeWheel(container, hhmm, onChange) {
+  const [h, m] = hhmm.split(':').map(Number);
+  const wheel = buildWheelShell();
+  let hour = h;
+  let minute = Math.min(55, Math.round(m / 5) * 5);
+
+  const hours = [];
+  for (let H = 0; H <= 23; H++) hours.push({ value: String(H), label: pad2(H) });
+  const minutes = [];
+  for (let M = 0; M <= 55; M += 5) minutes.push({ value: String(M), label: pad2(M) });
+
+  function emit() { onChange(pad2(hour) + ':' + pad2(minute)); }
+
+  const hCol = makeColumn(hours, String(hour), (v) => { hour = Number(v); emit(); });
+  const mCol = makeColumn(minutes, String(minute), (v) => { minute = Number(v); emit(); });
+
+  hCol.col.style.minWidth = '84px';
+  mCol.col.style.minWidth = '84px';
+  hCol.col.setAttribute('aria-label', 'Hour');
+  mCol.col.setAttribute('aria-label', 'Minute');
+
+  const sep = el('span', 'wheel-sep', ':');
+  wheel.append(hCol.col, sep, mCol.col);
+  container.appendChild(wheel);
+  return wheel;
+}
+
+/* ============================================================
+   12. DEFAULT TIMES
+   ============================================================ */
+
+function defaultTimes(dateISO) {
+  if (dateISO === todayISO()) {
+    const now = new Date();
+    let h = now.getHours();
+    let m = now.getMinutes() + 30;
+    if (m >= 60) { h += 1; m -= 60; }
+    m = Math.ceil(m / 5) * 5;
+    if (m >= 60) { h += 1; m -= 60; }
+    if (h > 23) { h = 23; m = 55; }
+    else if (m > 55) { m = 55; }
+    const start = pad2(h) + ':' + pad2(m);
+    return { start, end: addMinutes(start, 60) };
+  }
+  return { start: '09:00', end: '10:00' };
+}
+
+/* ============================================================
+   13. DEMO DATA  (seeded exactly once, never overwriting)
+   ============================================================ */
+
+function buildDemoEvents() {
+  const t = todayISO();
+  const list = [
+    { date: addDaysISO(t, -2), startTime: '20:00', endTime: '20:45', title: 'Weekly Review', category: 'Personal', color: 'pink' },
+    { date: addDaysISO(t, -1), startTime: '10:00', endTime: '11:30', title: '高数练习', category: 'Study', color: 'blue', note: 'Chapter 6 — integrals' },
+    { date: t, startTime: '09:00', endTime: '10:30', title: 'CET-6 Reading', category: 'English', color: 'blue' },
+    { date: t, startTime: '14:00', endTime: '15:00', title: '春江花月夜', category: 'Chinese', color: 'purple', note: 'Review poem analysis' },
+    { date: t, startTime: '17:00', endTime: '22:00', title: 'Evening Shift', category: 'Work', color: 'orange' },
+    { date: addDaysISO(t, 1), startTime: '07:30', endTime: '08:10', title: 'Morning Run', category: 'Health', color: 'green' },
+    { date: addDaysISO(t, 3), startTime: '19:00', endTime: '20:00', title: 'Book Club', category: 'Personal', color: 'purple', note: 'Chapter 4' },
+  ];
+  return list.map(normalizeEvent);
+}
+
+/* ============================================================
+   14. CALENDAR GRID
+   ============================================================ */
+
+function groupByDate() {
+  const map = new Map();
+  state.events.forEach((e) => {
+    if (!map.has(e.date)) map.set(e.date, []);
+    map.get(e.date).push(e);
+  });
+  map.forEach((list) => list.sort((a, b) => (a.startTime < b.startTime ? -1 : 1)));
+  return map;
+}
+
+function buildWeekdayHeader() {
+  const h = document.getElementById('weekdayHeader');
+  h.innerHTML = '';
+  for (let i = 0; i < 7; i++) h.appendChild(el('span', '', weekdayName(i)));
+}
+
+function renderCalendarGrid() {
+  const grid = document.getElementById('calendarGrid');
+  const { viewYear, viewMonth } = state;
+  const byDate = groupByDate();
+  const today = todayISO();
+
+  const firstOffset = (new Date(viewYear, viewMonth, 1).getDay() + 6) % 7; // Monday-first
+  const daysCur = daysInMonth(viewYear, viewMonth);
+  const TOTAL = 42;
+
+  const prevY = viewMonth === 0 ? viewYear - 1 : viewYear;
+  const prevM = viewMonth === 0 ? 11 : viewMonth - 1;
+  const daysPrev = daysInMonth(prevY, prevM);
+  const nextY = viewMonth === 11 ? viewYear + 1 : viewYear;
+  const nextM = viewMonth === 11 ? 0 : viewMonth + 1;
+
+  const cells = [];
+  for (let i = 0; i < firstOffset; i++) {
+    cells.push({ iso: isoDate(prevY, prevM, daysPrev - firstOffset + 1 + i), out: true });
+  }
+  for (let d = 1; d <= daysCur; d++) {
+    cells.push({ iso: isoDate(viewYear, viewMonth, d), out: false });
+  }
+  let nd = 1;
+  while (cells.length < TOTAL) {
+    cells.push({ iso: isoDate(nextY, nextM, nd), out: true });
+    nd++;
+  }
+
+  const frag = document.createDocumentFragment();
+  cells.forEach((c) => {
+    const { y, m, d } = parseISO(c.iso);
+    const btn = el('button', 'day');
+    btn.type = 'button';
+    btn.dataset.date = c.iso;
+    btn.setAttribute('role', 'gridcell');
+    if (c.out) btn.classList.add('is-out');
+    if (c.iso === today) btn.classList.add('is-today');
+    if (c.iso === state.selectedDate) btn.classList.add('is-selected');
+
+    btn.appendChild(el('span', 'day-num', String(d)));
+
+    const dots = el('span', 'day-dots');
+    const evs = byDate.get(c.iso) || [];
+    const colors = [...new Set(evs.map((e) => e.color))].slice(0, 3);
+    colors.forEach((col) => {
+      const dot = el('i');
+      dot.style.setProperty('--dot', EVENT_COLORS[col] || EVENT_COLORS.blue);
+      dots.appendChild(dot);
+    });
+    btn.appendChild(dots);
+
+    const n = evs.length;
+    let label = monthName(m, true) + ' ' + d + ', ' + y;
+    if (n) label += ', ' + n + (n === 1 ? ' event' : ' events');
+    if (c.iso === today) label += ', today';
+    if (c.iso === state.selectedDate) label += ', selected';
+    btn.setAttribute('aria-label', label);
+
+    btn.addEventListener('click', () => {
+      state.selectedDate = c.iso;
+      if (c.out) { state.viewYear = y; state.viewMonth = m; }
+      refreshCalendar();
+    });
+
+    frag.appendChild(btn);
+  });
+
+  grid.innerHTML = '';
+  grid.appendChild(frag);
+}
+
+/* Month-change animation + swipe (keeps everything in place). */
+let monthAnimating = false;
+
+function applyMonthShift(dir) {
+  state.viewMonth += dir;
+  if (state.viewMonth < 0) { state.viewMonth = 11; state.viewYear--; }
+  else if (state.viewMonth > 11) { state.viewMonth = 0; state.viewYear++; }
+  const sel = parseISO(state.selectedDate);
+  const max = daysInMonth(state.viewYear, state.viewMonth);
+  state.selectedDate = isoDate(state.viewYear, state.viewMonth, Math.min(sel.d, max));
+}
+
+function animateMonthChange(dir) {
+  if (monthAnimating) return;
+  monthAnimating = true;
+  const viewport = document.getElementById('gridViewport');
+  const grid = document.getElementById('calendarGrid');
+  const sign = dir > 0 ? -1 : 1;
+
+  grid.classList.remove('dragging');
+  grid.style.transition = 'transform 0.16s ease, opacity 0.16s ease';
+  grid.style.transform = 'translateX(' + sign * Math.round(viewport.offsetWidth * 0.5) + 'px)';
+  grid.style.opacity = '0';
+
+  setTimeout(() => {
+    applyMonthShift(dir);
+    refreshCalendar();
+    const g = document.getElementById('calendarGrid');
+    g.style.transition = 'none';
+    g.style.transform = 'translateX(' + -sign * Math.round(viewport.offsetWidth * 0.25) + 'px)';
+    g.style.opacity = '0';
+    void g.offsetWidth; // force reflow
+    g.style.transition = 'transform 0.2s cubic-bezier(0.32,0.72,0,1), opacity 0.2s ease';
+    g.style.transform = 'translateX(0)';
+    g.style.opacity = '1';
+    setTimeout(() => {
+      g.style.transition = '';
+      g.style.transform = '';
+      g.style.opacity = '';
+      monthAnimating = false;
+    }, 220);
+  }, 160);
+}
+
+function enableSwipe() {
+  const viewport = document.getElementById('gridViewport');
+  const grid = document.getElementById('calendarGrid');
+  let active = false;
+  let decided = false;
+  let startX = 0, startY = 0, dx = 0;
+  let suppress = false;
+
+  viewport.addEventListener('pointerdown', (e) => {
+    if (e.pointerType === 'mouse' && e.button !== 0) return;
+    active = true;
+    decided = false;
+    startX = e.clientX;
+    startY = e.clientY;
+    dx = 0;
+    grid.classList.add('dragging');
+    grid.style.transition = 'none';
+    grid.style.transform = '';
+    grid.style.opacity = '';
+  });
+
+  viewport.addEventListener('pointermove', (e) => {
+    if (!active) return;
+    const ndx = e.clientX - startX;
+    const ndy = e.clientY - startY;
+    if (!decided) {
+      if (Math.abs(ndx) < 6 && Math.abs(ndy) < 6) return;
+      if (Math.abs(ndy) >= Math.abs(ndx)) { // vertical intent → let the page scroll
+        active = false;
+        resetDrag();
+        return;
+      }
+      decided = true;
+    }
+    dx = ndx;
+    grid.style.transform = 'translateX(' + dx + 'px)';
+    grid.style.opacity = String(Math.max(0.4, 1 - Math.abs(dx) / 600));
+  });
+
+  const end = () => {
+    if (!active) return;
+    active = false;
+    grid.classList.remove('dragging');
+    if (!decided) { resetDrag(); return; }
+    if (Math.abs(dx) > 70) {
+      suppress = true;
+      setTimeout(() => { suppress = false; }, 0);
+      animateMonthChange(dx < 0 ? 1 : -1);
+    } else {
+      grid.style.transition = 'transform 0.2s cubic-bezier(0.32,0.72,0,1), opacity 0.2s ease';
+      grid.style.transform = 'translateX(0)';
+      grid.style.opacity = '1';
+      setTimeout(resetDrag, 200);
+    }
+  };
+
+  viewport.addEventListener('pointerup', end);
+  viewport.addEventListener('pointercancel', () => { active = false; resetDrag(); });
+
+  // Suppress the click that follows a horizontal swipe.
+  viewport.addEventListener('click', (e) => {
+    if (suppress) { e.stopPropagation(); e.preventDefault(); suppress = false; }
+  }, true);
+
+  function resetDrag() {
+    grid.classList.remove('dragging');
+    grid.style.transition = '';
+    grid.style.transform = '';
+    grid.style.opacity = '';
+  }
+}
+
+/* ============================================================
+   15. DAY DETAIL
+   ============================================================ */
+
+function emptyState() {
+  const wrap = el('div', 'empty-state');
+  wrap.innerHTML = ICON_CALENDAR_EMPTY;
+  wrap.appendChild(el('p', '', t('noEvents')));
+  const btn = el('button', '', t('addEventCta'));
+  btn.type = 'button';
+  btn.addEventListener('click', () => openEventSheet(null));
+  wrap.appendChild(btn);
+  return wrap;
+}
+
+function eventCard(e) {
+  const btn = el('button', 'event-card');
+  btn.type = 'button';
+  btn.setAttribute('aria-label', e.title + ', ' + e.startTime + ' to ' + e.endTime + (e.category ? ', ' + e.category : ''));
+
+  const accent = el('span', 'event-accent');
+  accent.style.setProperty('--c', EVENT_COLORS[e.color] || EVENT_COLORS.blue);
+
+  const time = el('span', 'event-time');
+  time.appendChild(el('span', 't-start', e.startTime));
+  time.appendChild(el('span', 't-end', e.endTime));
+
+  const body = el('span', 'event-body');
+  body.appendChild(el('span', 'event-title', e.title));
+  if (e.category) body.appendChild(el('span', 'event-meta', e.category));
+  if (e.note) body.appendChild(el('span', 'event-note', e.note));
+
+  const chev = el('span', 'event-chevron');
+  chev.innerHTML = I.chevR;
+
+  btn.append(accent, time, body, chev);
+  btn.addEventListener('click', () => openEventSheet(e.id));
+  return btn;
+}
+
+function renderDayDetail() {
+  const label = document.getElementById('dayLabel');
+  label.innerHTML = '';
+  label.appendChild(el('span', '', formatDayLabel(state.selectedDate)));
+  if (state.selectedDate === todayISO()) {
+    const chip = el('span', 'chip', t('todayChip'));
+    chip.style.color = 'var(--accent)';
+    chip.style.borderColor = 'var(--accent-soft)';
+    chip.style.background = 'var(--accent-soft)';
+    label.appendChild(chip);
+  }
+
+  const list = document.getElementById('eventsList');
+  const evs = groupByDate().get(state.selectedDate) || [];
+  list.innerHTML = '';
+  if (!evs.length) {
+    list.appendChild(emptyState());
+    return;
+  }
+  evs.forEach((e) => list.appendChild(eventCard(e)));
+}
+
+/* ============================================================
+   16. TODAY SCREEN
+   ============================================================ */
+
+function fmtNow() {
+  const n = new Date();
+  return pad2(n.getHours()) + ':' + pad2(n.getMinutes());
+}
+
+function renderTodayScreen() {
+  document.getElementById('todayDate').textContent = formatDayLabel(todayISO());
+
+  const meta = document.getElementById('todayMeta');
+  meta.innerHTML = '';
+  const evs = groupByDate().get(todayISO()) || [];
+
+  const countChip = el('span', 'chip', evs.length === 0 ? t('noEventsChip') : (evs.length === 1 ? t('oneEventChip') : t('eventsChip', { n: evs.length })));
+  const nowChip = el('span', 'chip');
+  nowChip.id = 'nowChip';
+  nowChip.innerHTML = '<span class="pulse"></span>';
+  nowChip.appendChild(document.createTextNode(t('nowChip') + ' · ' + fmtNow()));
+  meta.append(countChip, nowChip);
+
+  const list = document.getElementById('todayList');
+  list.innerHTML = '';
+  if (!evs.length) {
+    list.appendChild(emptyState());
+    return;
+  }
+  // Today is shown as a time-block timeline (same as Insights → Day).
+  list.appendChild(buildDayTimeline(evs, currentMinutes()));
+}
+
+function updateNow() {
+  const chip = document.getElementById('nowChip');
+  if (!chip) return;
+  while (chip.childNodes.length > 1) chip.removeChild(chip.lastChild);
+  chip.appendChild(document.createTextNode(t('nowChip') + ' · ' + fmtNow()));
+}
+
+/* ============================================================
+   17. MORE SCREEN  (Data / About)
+   ============================================================ */
+
+function formatBytes(bytes) {
+  if (!bytes || bytes < 1024) return (bytes || 0) + ' B';
+  const kb = bytes / 1024;
+  if (kb < 1024) return (Math.round(kb * 10) / 10) + ' KB';
+  return (Math.round((kb / 1024) * 10) / 10) + ' MB';
+}
+
+function estimatedSize() {
+  try {
+    return new Blob([JSON.stringify(state.events)]).size;
+  } catch (err) {
+    return JSON.stringify(state.events).length * 2;
+  }
+}
+
+function settingsCard() {
+  return el('section', 'settings-card');
+}
+
+function settingsHead(title, desc) {
+  const h = el('div', 'settings-head');
+  h.appendChild(el('h2', 'settings-title', title));
+  if (desc) h.appendChild(el('p', 'settings-desc', desc));
+  return h;
+}
+
+function statTile(label, value) {
+  const t = el('div', 'stat-tile');
+  t.appendChild(el('span', 'stat-label', label));
+  t.appendChild(el('span', 'stat-value', value));
+  return t;
+}
+
+function segButton(label, opts) {
+  opts = opts || {};
+  let cls = 'btn-seg';
+  if (opts.primary) cls += ' is-primary';
+  if (opts.danger) cls += ' is-danger';
+  const b = el('button', cls, label);
+  b.type = 'button';
+  if (opts.icon) {
+    const i = el('span', 'btn-seg-icon');
+    i.innerHTML = opts.icon;
+    b.prepend(i);
+  }
+  if (opts.onClick) b.addEventListener('click', opts.onClick);
+  return b;
+}
+
+function settingsRow({ icon, label, value, onClick }) {
+  const b = el('button', 'settings-row');
+  b.type = 'button';
+  if (icon) {
+    const ic = el('span', 'row-icon');
+    ic.innerHTML = icon;
+    b.appendChild(ic);
+  }
+  b.appendChild(el('span', 'row-label', label));
+  if (value) b.appendChild(el('span', 'row-value', value));
+  const chev = el('span', 'row-chev');
+  chev.innerHTML = I.chevR;
+  b.appendChild(chev);
+  if (onClick) b.addEventListener('click', onClick);
+  return b;
+}
+
+function renderMoreScreen() {
+  const groups = document.getElementById('moreGroups');
+  groups.innerHTML = '';
+
+  if (!StorageService.available) {
+    const notice = el('div', 'storage-notice is-visible');
+    notice.textContent = 'This preview blocks local storage, so changes will not survive a reload. Deploy to a stable HTTPS URL (e.g. GitHub Pages) for full persistence.';
+    groups.appendChild(notice);
+  }
+
+  // ── Data
+  const dataCard = settingsCard();
+  dataCard.appendChild(settingsHead(t('data'), t('dataDesc')));
+  const statRow = el('div', 'stat-row');
+  statRow.appendChild(statTile(t('events'), String(state.events.length)));
+  statRow.appendChild(statTile(t('templates'), String(state.categories.length)));
+  statRow.appendChild(statTile(t('size'), formatBytes(estimatedSize())));
+  dataCard.appendChild(statRow);
+  const actions = el('div', 'settings-actions');
+  actions.appendChild(segButton(t('export'), { icon: I.up, primary: true, onClick: exportData }));
+  actions.appendChild(segButton(t('import'), { icon: I.down, onClick: importData }));
+  actions.appendChild(segButton(t('clearAll'), { icon: I.trash, danger: true, onClick: clearAllData }));
+  dataCard.appendChild(actions);
+  dataCard.appendChild(storageKeysBlock());
+  groups.appendChild(dataCard);
+
+  // ── Language
+  const langCard = settingsCard();
+  langCard.appendChild(settingsHead(t('language'), t('languageDesc')));
+  const langBtns = el('div', 'lang-btns');
+  ['en', 'zh'].forEach((lang) => {
+    const label = lang === 'en' ? t('english') : t('chinese');
+    langBtns.appendChild(segButton(label, { primary: appLang === lang, onClick: () => applyLanguage(lang) }));
+  });
+  langCard.appendChild(langBtns);
+  groups.appendChild(langCard);
+
+  // ── About
+  const aboutCard = settingsCard();
+  aboutCard.appendChild(settingsHead(t('about'), t('aboutDesc')));
+  const rows = el('div', 'settings-rows');
+  rows.appendChild(settingsRow({
+    icon: I.tag,
+    label: t('eventTemplates'),
+    value: t('templatesDefined', { n: state.categories.length }),
+    onClick: openTemplatesModal,
+  }));
+  rows.appendChild(settingsRow({
+    icon: I.db,
+    label: t('storage'),
+    value: StorageService.available ? t('onThisDevice') : t('limitedPreview'),
+    onClick: showStorageInfo,
+  }));
+  rows.appendChild(settingsRow({
+    icon: I.down,
+    label: t('importGuide'),
+    onClick: openImportGuide,
+  }));
+  rows.appendChild(settingsRow({
+    icon: I.info,
+    label: t('aboutCalendar'),
+    value: t('version'),
+    onClick: showAbout,
+  }));
+  aboutCard.appendChild(rows);
+  groups.appendChild(aboutCard);
+}
+
+function openImportGuide() {
+  const sample = [
+    {
+      date: '2026-08-16',
+      startTime: '09:00',
+      endTime: '10:30',
+      title: 'CET-6 Reading',
+      category: 'English',
+      color: 'blue',
+      note: 'optional',
+    },
+  ];
+  const body = el('div');
+  const desc = el('p', 'settings-desc', t('importGuideDesc'));
+  desc.style.marginBottom = '12px';
+  body.appendChild(desc);
+  const pre = el('pre', 'json-block', JSON.stringify(sample, null, 2));
+  body.appendChild(pre);
+  const note = el('p', 'settings-desc', t('importGuideNote'));
+  note.style.marginTop = '12px';
+  body.appendChild(note);
+  openStudyModal({ title: t('importGuide'), body });
+}
+
+async function applyLanguage(lang) {
+  appLang = lang;
+  await DataService.setSetting('lang', lang);
+  document.documentElement.lang = lang === 'zh' ? 'zh-CN' : 'en';
+  applyStaticTranslations();
+  refreshAll();
+  toast(lang === 'zh' ? '已切换为中文' : 'Switched to English');
+}
+
+function applyStaticTranslations() {
+  document.querySelectorAll('[data-i18n]').forEach((node) => {
+    node.textContent = t(node.getAttribute('data-i18n'));
+  });
+  const btn = document.getElementById('btnTodayTop');
+  if (btn) btn.textContent = t('today');
+}
+
+function storageKeysBlock() {
+  const details = el('details', 'key-details');
+  const summary = el('summary');
+  summary.appendChild(el('span', '', t('storageKeys')));
+  const chev = el('span', 'key-chev');
+  chev.innerHTML = I.chevDown;
+  summary.appendChild(chev);
+  details.appendChild(summary);
+
+  const body = el('div', 'key-details-body');
+  const head = el('div', 'key-list-head');
+  head.appendChild(el('span', 'key-name', t('key')));
+  head.appendChild(el('span', 'key-num', t('entries')));
+  head.appendChild(el('span', 'key-size', t('size')));
+  body.appendChild(head);
+
+  const rows = [
+    { key: STORAGE_KEY, entries: state.events.length, size: estimatedSize() },
+    { key: CATEGORY_KEY, entries: state.categories.length, size: JSON.stringify(state.categories).length * 2 },
+    { key: SETTINGS_KEY, entries: '—', size: JSON.stringify({ lang: appLang }).length * 2 },
+  ];
+  StorageService.backupKeys().forEach((k) => {
+    let raw = '';
+    try { raw = window.localStorage.getItem(k) || ''; } catch (e) { /* ignore */ }
+    rows.push({ key: k, entries: '—', size: raw.length * 2 });
+  });
+
+  rows.forEach((r) => {
+    const row = el('div', 'key-row');
+    row.appendChild(el('span', 'key-name', r.key));
+    row.appendChild(el('span', 'key-num', String(r.entries)));
+    row.appendChild(el('span', 'key-size', formatBytes(r.size)));
+    body.appendChild(row);
+  });
+  details.appendChild(body);
+  return details;
+}
+
+function showStorageInfo() {
+  const mode = StorageService.available
+    ? t('onThisDevice') + ' (localStorage).'
+    : t('limitedPreview') + ' — localStorage.';
+  showDialog({
+    title: t('storage'),
+    message: t('storageMsg', { n: state.events.length, s: formatBytes(estimatedSize()), m: state.categories.length, mode: mode }),
+    actions: [{ label: t('done') }],
+  });
+}
+
+/* ── Event templates (categories) — editable in a StudyHub-style popup ── */
+
+let tplApi = null;
+
+function openTemplatesModal() {
+  if (tplApi && !tplApi.closed) {
+    tplApi.setContent(buildTemplatesListBody(), buildTemplatesFooter(), t('eventTemplates'));
+    return;
+  }
+  tplApi = openStudyModal({
+    title: t('eventTemplates'),
+    body: buildTemplatesListBody(),
+    footer: buildTemplatesFooter(),
+    onClose: () => { tplApi = null; },
+  });
+}
+
+function buildTemplatesListBody() {
+  const body = el('div');
+  const list = el('div', 'tpl-list');
+  body.appendChild(list);
+
+  function renderList() {
+    list.innerHTML = '';
+    if (!state.categories.length) {
+      list.appendChild(el('div', 'tpl-empty', t('noTemplates')));
+      return;
+    }
+    state.categories.forEach((cat) => {
+      const row = el('button', 'tpl-row');
+      row.type = 'button';
+      const dot = el('span', 'tpl-dot');
+      dot.style.setProperty('--c', EVENT_COLORS[cat.color] || EVENT_COLORS.blue);
+      const name = el('span', 'tpl-name', cat.name);
+      const n = state.events.filter((e) => (e.category || '') === cat.name).length;
+      const cnt = el('span', 'tpl-count', n ? (n === 1 ? t('oneEventUsed') : t('eventsUsed', { n: n })) : '');
+      const chev = el('span', 'tpl-chev');
+      chev.innerHTML = I.chevR;
+      const delBtn = el('button', 'tpl-del-btn');
+      delBtn.type = 'button';
+      delBtn.setAttribute('aria-label', t('delete') + ' ' + cat.name);
+      delBtn.innerHTML = I.trash;
+      delBtn.addEventListener('click', (ev) => { ev.stopPropagation(); confirmDeleteTemplate(cat); });
+      row.append(dot, name, cnt, chev, delBtn);
+      row.addEventListener('click', () => showTemplateForm(cat));
+      list.appendChild(row);
+    });
+  }
+  list._renderList = renderList;
+  renderList();
+  return body;
+}
+
+function buildTemplatesFooter() {
+  const foot = el('div', 'study-modal-foot');
+  const hint = el('span', 'modal-hint', t('templatesHint'));
+  const addBtn = el('button', 'btn btn-primary', t('addTemplate'));
+  addBtn.type = 'button';
+  addBtn.addEventListener('click', () => showTemplateForm(null));
+  foot.append(hint, addBtn);
+  return foot;
+}
+
+function showTemplateForm(cat) {
+  const isEdit = !!cat;
+  const draft = { id: isEdit ? cat.id : null, name: isEdit ? cat.name : '', color: isEdit ? cat.color : 'blue' };
+
+  const body = el('div');
+
+  const nameField = el('div', 'form-field');
+  nameField.appendChild(el('label', 'form-label', t('name')));
+  const nameInput = el('input', 'text-input');
+  nameInput.type = 'text';
+  nameInput.placeholder = t('namePlaceholder');
+  nameInput.autocomplete = 'off';
+  nameInput.value = draft.name;
+  nameField.appendChild(nameInput);
+  body.appendChild(nameField);
+
+  const colorField = el('div', 'form-field');
+  colorField.appendChild(el('label', 'form-label', t('color')));
+  const swatches = el('div', 'swatches');
+  function setSwatchColor(color) {
+    Array.from(swatches.children).forEach((x) => {
+      const on = x.dataset.color === color;
+      x.classList.toggle('is-selected', on);
+      x.setAttribute('aria-pressed', String(on));
+    });
+  }
+  COLOR_ORDER.forEach((c) => {
+    const s = el('button', 'swatch');
+    s.type = 'button';
+    s.dataset.color = c;
+    s.style.setProperty('--sw', EVENT_COLORS[c]);
+    s.setAttribute('aria-label', 'Color ' + c);
+    s.setAttribute('aria-pressed', String(draft.color === c));
+    if (draft.color === c) s.classList.add('is-selected');
+    s.innerHTML = I.check;
+    s.addEventListener('click', () => { draft.color = c; setSwatchColor(c); });
+    swatches.appendChild(s);
+  });
+  colorField.appendChild(swatches);
+  body.appendChild(colorField);
+
+  const foot = el('div', 'study-modal-foot');
+  const spacer = el('span');
+  spacer.style.flex = '1';
+  const cancelBtn = el('button', 'btn btn-ghost', t('cancel'));
+  cancelBtn.type = 'button';
+  const saveBtn = el('button', 'btn btn-primary', isEdit ? t('save') : t('add'));
+  saveBtn.type = 'button';
+  foot.append(spacer, cancelBtn, saveBtn);
+
+  tplApi.setContent(body, foot, isEdit ? t('editTemplate') : t('newTemplate'));
+
+  cancelBtn.addEventListener('click', () => openTemplatesModal());
+  saveBtn.addEventListener('click', async () => {
+    const name = nameInput.value.trim();
+    if (!name) { nameInput.classList.add('is-invalid'); nameInput.focus(); return; }
+    const catObj = normalizeCategory({ id: draft.id, name, color: draft.color });
+    if (isEdit) {
+      const i = state.categories.findIndex((c) => c.id === cat.id);
+      if (i >= 0) state.categories[i] = catObj;
+    } else {
+      const i = state.categories.findIndex((c) => c.name.toLowerCase() === name.toLowerCase());
+      if (i >= 0) state.categories[i] = catObj;
+      else state.categories.push(catObj);
+    }
+    await DataService.saveCategories(state.categories);
+    openTemplatesModal();
+    refreshAll();
+    toast(isEdit ? t('templateSaved') : t('templateAdded'));
+  });
+}
+
+function confirmDeleteTemplate(cat) {
+  showDialog({
+    title: t('deleteTemplateTitle'),
+    message: '“' + cat.name + '” ' + t('deleteTemplateMsg'),
+    actions: [
+      { label: t('cancel') },
+      {
+        label: t('delete'),
+        danger: true,
+        onClick: async () => {
+          state.categories = state.categories.filter((c) => c.id !== cat.id);
+          await DataService.saveCategories(state.categories);
+          const listEl = document.querySelector('.tpl-list');
+          if (listEl && listEl._renderList) listEl._renderList();
+          refreshAll();
+          toast(t('templateDeleted'));
+        },
+      },
+    ],
+  });
+}
+
+async function exportData() {
+  const events = await DataService.exportAll();
+  const payload = { app: 'calendar', version: 1, exportedAt: new Date().toISOString(), events, categories: state.categories };
+  const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = 'calendar_events_' + todayISO() + '.json';
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 1500);
+  toast(events.length ? t('exported', { n: events.length }) : t('noExport'));
+}
+
+function importData() {
+  const input = document.getElementById('importFile');
+  input.value = '';
+  input.click();
+}
+
+function clearAllData() {
+  showDialog({
+    title: t('clearAllTitle'),
+    message: t('clearAllMsg'),
+    actions: [
+      { label: t('cancel') },
+      {
+        label: t('clear'),
+        danger: true,
+        onClick: async () => {
+          await DataService.clear();
+          await refreshEvents();
+          refreshAll();
+          toast(t('dataCleared'));
+        },
+      },
+    ],
+  });
+}
+
+function showAbout() {
+  showDialog({
+    title: 'Calendar',
+    message: t('aboutMsg'),
+    actions: [{ label: t('done') }],
+  });
+}
+
+/* ============================================================
+   18. MONTH / YEAR SELECTOR
+   ============================================================ */
+
+function openMonthSelector() {
+  const sheetYear = { value: state.viewYear };
+  const body = el('div');
+
+  const yearRow = el('div', 'selector-year-row');
+  const prevY = el('button', 'year-arrow');
+  prevY.type = 'button';
+  prevY.setAttribute('aria-label', t('prevYear'));
+  prevY.innerHTML = I.chevLeft;
+  const nextY = el('button', 'year-arrow');
+  nextY.type = 'button';
+  nextY.setAttribute('aria-label', t('nextYear'));
+  nextY.innerHTML = I.chevRight;
+  const yearVal = el('span', 'year-value', String(sheetYear.value));
+  yearRow.append(prevY, yearVal, nextY);
+  prevY.addEventListener('click', () => { sheetYear.value--; yearVal.textContent = sheetYear.value; renderGrid(); });
+  nextY.addEventListener('click', () => { sheetYear.value++; yearVal.textContent = sheetYear.value; renderGrid(); });
+
+  const grid = el('div', 'month-grid');
+
+  function renderGrid() {
+    grid.innerHTML = '';
+    const now = new Date();
+    const isNowYear = now.getFullYear() === sheetYear.value;
+    for (let m = 0; m < 12; m++) {
+      const b = el('button', 'month-cell', monthName(m, false));
+      b.type = 'button';
+      if (sheetYear.value === state.viewYear && m === state.viewMonth) b.classList.add('is-current');
+      else if (isNowYear && m === now.getMonth()) b.classList.add('is-today-month');
+      b.addEventListener('click', () => {
+        state.viewYear = sheetYear.value;
+        state.viewMonth = m;
+        api.close();
+        refreshCalendar();
+      });
+      grid.appendChild(b);
+    }
+  }
+  renderGrid();
+
+  body.append(yearRow, grid);
+
+  const titleBtn = document.getElementById('monthTitleBtn');
+  titleBtn.classList.add('is-open');
+  const api = openSheet({
+    title: t('selectDate'),
+    body,
+    onClose: () => titleBtn.classList.remove('is-open'),
+  });
+}
+
+/* ============================================================
+   19. EVENT FORM SHEET  (add / edit)
+   ============================================================ */
+
+function openEventSheet(eventId, opts) {
+  opts = opts || {};
+  const existing = eventId ? state.events.find((e) => e.id === eventId) : null;
+  const initialDate = existing ? existing.date : (opts.date || state.selectedDate);
+  const def = defaultTimes(initialDate);
+
+  const draft = {
+    id: existing ? existing.id : null,
+    date: initialDate,
+    startTime: existing ? existing.startTime : def.start,
+    endTime: existing ? existing.endTime : def.end,
+    title: existing ? existing.title : '',
+    category: existing ? existing.category : '',
+    color: existing ? existing.color : 'blue',
+    note: existing ? existing.note : '',
+  };
+
+  const body = el('div');
+
+  // ── Title
+  const titleField = el('div', 'form-field');
+  titleField.appendChild(el('label', 'form-label', t('title')));
+  const titleInput = el('input', 'text-input');
+  titleInput.type = 'text';
+  titleInput.placeholder = t('titlePlaceholder');
+  titleInput.autocomplete = 'off';
+  titleInput.value = draft.title;
+  const errEl = el('span', 'field-error');
+  titleInput.addEventListener('input', () => { titleInput.classList.remove('is-invalid'); errEl.textContent = ''; });
+  titleField.append(titleInput, errEl);
+  body.appendChild(titleField);
+
+  // ── Date
+  const dateField = el('div', 'form-field');
+  dateField.appendChild(el('label', 'form-label', t('date')));
+  const dateTrigger = el('button', 'picker-trigger');
+  dateTrigger.type = 'button';
+  const dateValue = el('span', 'pt-value', formatShortDate(draft.date));
+  const dateIcon = el('span', 'pt-icon');
+  dateIcon.innerHTML = I.chevDown;
+  dateTrigger.append(dateValue, dateIcon);
+  const dateZone = el('div', 'wheel-zone');
+  const dateHost = el('div');
+  dateZone.appendChild(dateHost);
+  dateField.append(dateTrigger, dateZone);
+  body.appendChild(dateField);
+
+  // ── Start / End
+  const timeRow = el('div', 'picker-row');
+
+  const startField = el('div', 'form-field');
+  startField.appendChild(el('label', 'form-label', t('start')));
+  const startTrigger = el('button', 'picker-trigger');
+  startTrigger.type = 'button';
+  const startValue = el('span', 'pt-value', draft.startTime);
+  const startIcon = el('span', 'pt-icon');
+  startIcon.innerHTML = I.chevDown;
+  startTrigger.append(startValue, startIcon);
+  const startZone = el('div', 'wheel-zone');
+  const startHost = el('div');
+  startZone.appendChild(startHost);
+  startField.append(startTrigger, startZone);
+
+  const endField = el('div', 'form-field');
+  endField.appendChild(el('label', 'form-label', t('end')));
+  const endTrigger = el('button', 'picker-trigger');
+  endTrigger.type = 'button';
+  const endValue = el('span', 'pt-value', draft.endTime);
+  const endIcon = el('span', 'pt-icon');
+  endIcon.innerHTML = I.chevDown;
+  endTrigger.append(endValue, endIcon);
+  const endZone = el('div', 'wheel-zone');
+  const endHost = el('div');
+  endZone.appendChild(endHost);
+  endField.append(endTrigger, endZone);
+
+  timeRow.append(startField, endField);
+  body.appendChild(timeRow);
+
+  // ── Category (with quick-select templates)
+  const catField = el('div', 'form-field');
+  catField.appendChild(el('label', 'form-label', t('category')));
+  const catInput = el('input', 'text-input');
+  catInput.type = 'text';
+  catInput.placeholder = t('categoryPlaceholder');
+  catInput.autocomplete = 'off';
+  catInput.value = draft.category;
+  catInput.setAttribute('list', 'catSuggestions');
+  catField.appendChild(catInput);
+
+  const chips = el('div', 'tpl-chips');
+  catField.appendChild(chips);
+  body.appendChild(catField);
+
+  function currentCats() {
+    return state.categories.length ? state.categories : DEFAULT_CATEGORIES.map(normalizeCategory);
+  }
+  function renderCatChips() {
+    chips.innerHTML = '';
+    currentCats().forEach((cat) => {
+      const pill = el('button', 'tpl-chip');
+      pill.type = 'button';
+      const dot = el('span', 'tpl-chip-dot');
+      dot.style.setProperty('--c', EVENT_COLORS[cat.color] || EVENT_COLORS.blue);
+      pill.appendChild(dot);
+      pill.appendChild(el('span', '', cat.name));
+      if (draft.category === cat.name) pill.classList.add('is-active');
+      pill.addEventListener('click', () => {
+        draft.category = cat.name;
+        draft.color = cat.color;
+        catInput.value = cat.name;
+        setSwatchColor(cat.color);
+        renderCatChips();
+      });
+      chips.appendChild(pill);
+    });
+  }
+  renderCatChips();
+
+  catInput.addEventListener('input', () => {
+    const name = catInput.value.trim();
+    const match = currentCats().find((c) => c.name.toLowerCase() === name.toLowerCase());
+    if (match) { draft.color = match.color; setSwatchColor(match.color); }
+    renderCatChips();
+  });
+
+  const dl = el('datalist');
+  dl.id = 'catSuggestions';
+  currentCats().forEach((c) => {
+    const o = el('option');
+    o.value = c.name;
+    dl.appendChild(o);
+  });
+  body.appendChild(dl);
+
+  // ── Color
+  const colorField = el('div', 'form-field');
+  colorField.appendChild(el('label', 'form-label', t('color')));
+  const swatches = el('div', 'swatches');
+  function setSwatchColor(color) {
+    Array.from(swatches.children).forEach((x) => {
+      const on = x.dataset.color === color;
+      x.classList.toggle('is-selected', on);
+      x.setAttribute('aria-pressed', String(on));
+    });
+  }
+  COLOR_ORDER.forEach((c) => {
+    const s = el('button', 'swatch');
+    s.type = 'button';
+    s.dataset.color = c;
+    s.style.setProperty('--sw', EVENT_COLORS[c]);
+    s.setAttribute('aria-label', 'Color ' + c);
+    s.setAttribute('aria-pressed', String(draft.color === c));
+    if (draft.color === c) s.classList.add('is-selected');
+    s.innerHTML = I.check;
+    s.addEventListener('click', () => {
+      draft.color = c;
+      setSwatchColor(c);
+    });
+    swatches.appendChild(s);
+  });
+  colorField.appendChild(swatches);
+  body.appendChild(colorField);
+
+  // ── Note
+  const noteField = el('div', 'form-field');
+  noteField.appendChild(el('label', 'form-label', t('note')));
+  const noteInput = el('textarea', 'text-input');
+  noteInput.rows = 2;
+  noteInput.placeholder = t('notePlaceholder');
+  noteInput.value = draft.note;
+  noteField.appendChild(noteInput);
+  body.appendChild(noteField);
+
+  // ── Delete (edit only)
+  let apiRef = null;
+  if (existing) {
+    const del = el('button', 'btn-danger-text', t('deleteEvent'));
+    del.type = 'button';
+    del.addEventListener('click', () => confirmDelete(existing, apiRef));
+    body.appendChild(del);
+  }
+
+  // ── Accordion pickers
+  const triggers = { date: dateTrigger, start: startTrigger, end: endTrigger };
+  const zones = { date: dateZone, start: startZone, end: endZone };
+  const hosts = { date: dateHost, start: startHost, end: endHost };
+  let currentPicker = null;
+
+  function closePicker() {
+    currentPicker = null;
+    Object.keys(zones).forEach((k) => zones[k].classList.remove('is-open'));
+    Object.keys(triggers).forEach((k) => triggers[k].classList.remove('is-open'));
+  }
+
+  function openPicker(kind) {
+    if (currentPicker === kind) { closePicker(); return; }
+    closePicker();
+    currentPicker = kind;
+    zones[kind].classList.add('is-open');
+    triggers[kind].classList.add('is-open');
+    hosts[kind].innerHTML = '';
+    if (kind === 'date') {
+      buildDateWheel(hosts[kind], draft.date, (iso) => { draft.date = iso; dateValue.textContent = formatShortDate(iso); });
+    } else if (kind === 'start') {
+      buildTimeWheel(hosts[kind], draft.startTime, (t) => { draft.startTime = t; startValue.textContent = t; });
+    } else {
+      buildTimeWheel(hosts[kind], draft.endTime, (t) => { draft.endTime = t; endValue.textContent = t; });
+    }
+  }
+
+  dateTrigger.addEventListener('click', () => openPicker('date'));
+  startTrigger.addEventListener('click', () => openPicker('start'));
+  endTrigger.addEventListener('click', () => openPicker('end'));
+
+  // ── Footer
+  const footer = el('div', 'study-modal-foot');
+  const spacer = el('span');
+  spacer.style.flex = '1';
+  const cancelBtn = el('button', 'btn btn-ghost', t('cancel'));
+  cancelBtn.type = 'button';
+  const saveBtn = el('button', 'btn btn-primary', existing ? t('save') : t('addEvent'));
+  saveBtn.type = 'button';
+  footer.append(spacer, cancelBtn, saveBtn);
+
+  const api = openStudyModal({
+    title: existing ? t('editEvent') : t('newEvent'),
+    body,
+    footer,
+  });
+  apiRef = api;
+
+  cancelBtn.addEventListener('click', () => api.close());
+  saveBtn.addEventListener('click', save);
+
+  function save() {
+    const title = titleInput.value.trim();
+    if (!title) {
+      titleInput.classList.add('is-invalid');
+      errEl.textContent = t('titleRequired');
+      titleInput.focus();
+      return;
+    }
+    if (draft.endTime <= draft.startTime) {
+      draft.endTime = addMinutes(draft.startTime, 60);
+      endValue.textContent = draft.endTime;
+    }
+    const event = {
+      id: draft.id,
+      date: draft.date,
+      startTime: draft.startTime,
+      endTime: draft.endTime,
+      title,
+      category: catInput.value.trim(),
+      color: draft.color,
+      note: noteInput.value.trim(),
+      createdAt: existing ? existing.createdAt : undefined,
+      updatedAt: new Date().toISOString(),
+    };
+    (async () => {
+      const saved = normalizeEvent(event);
+      if (draft.id) await DataService.update(saved);
+      else await DataService.create(saved);
+      await refreshEvents();
+      api.close();
+      refreshAll();
+      toast(draft.id ? t('eventSaved') : t('eventAdded'));
+    })();
+  }
+}
+
+function confirmDelete(event, sheetApi) {
+  showDialog({
+    title: t('deleteEventTitle'),
+    message: '“' + event.title + '” ' + t('deleteEventMsg'),
+    actions: [
+      { label: t('cancel') },
+      {
+        label: t('delete'),
+        danger: true,
+        onClick: async () => {
+          await DataService.remove(event.id);
+          await refreshEvents();
+          if (sheetApi) sheetApi.close();
+          refreshAll();
+          toast(t('eventDeleted'));
+        },
+      },
+    ],
+  });
+}
+
+/* ============================================================
+   19b. INSIGHTS  (日 / 周 / 月 / 年 analytics)
+   ------------------------------------------------------------
+   All charts are derived automatically from the same event data
+   (state.events) — imported data is fully linked across every
+   section; nothing needs to be imported per-view.
+   ============================================================ */
+
+function hexToRgba(hex, a) {
+  const h = String(hex).replace('#', '');
+  const r = parseInt(h.slice(0, 2), 16);
+  const g = parseInt(h.slice(2, 4), 16);
+  const b = parseInt(h.slice(4, 6), 16);
+  return 'rgba(' + r + ',' + g + ',' + b + ',' + a + ')';
+}
+
+function mondayOf(y, m, d) {
+  const dt = new Date(y, m, d);
+  const dow = (dt.getDay() + 6) % 7;
+  dt.setDate(dt.getDate() - dow);
+  return isoDate(dt.getFullYear(), dt.getMonth(), dt.getDate());
+}
+
+function insightsPeriod() {
+  const { mode, year, month, day } = insights;
+  if (mode === 'day') { const iso = isoDate(year, month, day); return { start: iso, end: iso }; }
+  if (mode === 'week') { const mon = mondayOf(year, month, day); return { start: mon, end: addDaysISO(mon, 6) }; }
+  if (mode === 'month') { return { start: isoDate(year, month, 1), end: isoDate(year, month, daysInMonth(year, month)) }; }
+  return { start: year + '-01-01', end: year + '-12-31' };
+}
+
+function insightsEvents() {
+  const p = insightsPeriod();
+  return state.events.filter((e) => e.date >= p.start && e.date <= p.end);
+}
+
+function insightsLabel() {
+  const { mode, year, month, day } = insights;
+  if (mode === 'day') return formatShortDate(isoDate(year, month, day));
+  if (mode === 'week') {
+    const mon = mondayOf(year, month, day);
+    const sun = addDaysISO(mon, 6);
+    const a = parseISO(mon), b = parseISO(sun);
+    if (appLang === 'zh') return (a.m + 1) + '月' + a.d + '日 – ' + (b.m + 1) + '月' + b.d + '日';
+    if (a.y === b.y && a.m === b.m) return MONTHS_SHORT[a.m] + ' ' + a.d + ' – ' + b.d + ', ' + a.y;
+    return MONTHS_SHORT[a.m] + ' ' + a.d + ' – ' + MONTHS_SHORT[b.m] + ' ' + b.d + ', ' + b.y;
+  }
+  if (mode === 'month') return appLang === 'zh' ? year + '年' + (month + 1) + '月' : MONTHS_LONG[month] + ' ' + year;
+  return appLang === 'zh' ? year + '年' : String(year);
+}
+
+function shiftInsights(dir) {
+  if (insights.mode === 'day') {
+    const d = new Date(insights.year, insights.month, insights.day + dir);
+    insights.year = d.getFullYear(); insights.month = d.getMonth(); insights.day = d.getDate();
+  } else if (insights.mode === 'week') {
+    const d = new Date(insights.year, insights.month, insights.day + dir * 7);
+    insights.year = d.getFullYear(); insights.month = d.getMonth(); insights.day = d.getDate();
+  } else if (insights.mode === 'month') {
+    insights.month += dir;
+    if (insights.month < 0) { insights.month = 11; insights.year--; }
+    else if (insights.month > 11) { insights.month = 0; insights.year++; }
+    const max = daysInMonth(insights.year, insights.month);
+    if (insights.day > max) insights.day = max;
+  } else {
+    insights.year += dir;
+  }
+  renderInsights();
+}
+
+function catColorOf(name, eColor) {
+  const cat = state.categories.find((c) => c.name === name);
+  if (cat) return EVENT_COLORS[cat.color] || EVENT_COLORS.blue;
+  return EVENT_COLORS[eColor] || '#D1D1D6';
+}
+
+function uncategorizedName() {
+  return appLang === 'zh' ? '未分类' : 'Uncategorized';
+}
+
+function categoryAgg(events) {
+  const map = new Map();
+  events.forEach((e) => {
+    const name = (e.category && e.category.trim()) ? e.category.trim() : uncategorizedName();
+    const key = name === uncategorizedName() ? '__none__' : name;
+    if (!map.has(key)) {
+      map.set(key, { name: name, value: 0, color: key === '__none__' ? '#D1D1D6' : catColorOf(name, e.color) });
+    }
+    map.get(key).value += 1;
+  });
+  return [...map.values()].sort((a, b) => b.value - a.value);
+}
+
+function totalHours(events) {
+  return events.reduce((s, e) => s + Math.max(0, toMinutes(e.endTime) - toMinutes(e.startTime)) / 60, 0);
+}
+
+function hourHistogram(events) {
+  const counts = new Array(24).fill(0);
+  events.forEach((e) => {
+    const h = Math.min(23, Math.floor(toMinutes(e.startTime) / 60));
+    counts[h] += 1;
+  });
+  return counts;
+}
+
+/* ── SVG bar chart ── */
+function svgHost(svgString) {
+  const d = el('div');
+  d.innerHTML = svgString;
+  return d;
+}
+
+function barsSVG(labels, values, opts) {
+  opts = opts || {};
+  const W = 328, H = 150, padB = 18, padT = 12, padL = 6, padR = 6;
+  const innerW = W - padL - padR;
+  const innerH = H - padT - padB;
+  const max = Math.max(1, ...values);
+  const n = values.length;
+  const step = innerW / n;
+  const bw = Math.max(3, Math.min(14, step * 0.55));
+  const color = opts.color || EVENT_COLORS.blue;
+  let grid = '', rects = '', labelsOut = '';
+  [0, 0.5, 1].forEach((f) => {
+    const y = padT + innerH * (1 - f);
+    grid += '<line x1="' + padL + '" y1="' + y.toFixed(1) + '" x2="' + (W - padR) + '" y2="' + y.toFixed(1) + '" stroke="rgba(60,60,67,0.12)" stroke-width="1"/>';
+  });
+  values.forEach((v, i) => {
+    const h = v === 0 ? 0 : Math.max(3, (v / max) * innerH);
+    const x = padL + i * step + (step - bw) / 2;
+    const y = padT + innerH - h;
+    rects += '<rect x="' + x.toFixed(1) + '" y="' + y.toFixed(1) + '" width="' + bw.toFixed(1) + '" height="' + h.toFixed(1) + '" rx="' + Math.min(3, bw / 2).toFixed(1) + '" fill="' + color + '"/>';
+    if (labels[i]) {
+      labelsOut += '<text x="' + (x + bw / 2).toFixed(1) + '" y="' + (H - 6) + '" font-size="9" fill="#86868B" text-anchor="middle">' + labels[i] + '</text>';
+    }
+  });
+  const maxLabel = '<text x="' + padL + '" y="' + (padT + 8) + '" font-size="9" fill="#86868B">' + max + '</text>';
+  return '<svg class="bar-svg" viewBox="0 0 ' + W + ' ' + H + '" preserveAspectRatio="xMidYMid meet" role="img" aria-label="bar chart">' + grid + rects + maxLabel + labelsOut + '</svg>';
+}
+
+/* ── SVG line / area chart ── */
+function lineSVG(labels, values, opts) {
+  opts = opts || {};
+  const W = 328, H = 150, padB = 18, padT = 12, padL = 6, padR = 6;
+  const innerW = W - padL - padR;
+  const innerH = H - padT - padB;
+  const max = Math.max(1, ...values);
+  const n = values.length;
+  const step = innerW / n;
+  const color = opts.color || EVENT_COLORS.purple;
+  let grid = '';
+  [0, 0.5, 1].forEach((f) => {
+    const y = padT + innerH * (1 - f);
+    grid += '<line x1="' + padL + '" y1="' + y.toFixed(1) + '" x2="' + (W - padR) + '" y2="' + y.toFixed(1) + '" stroke="rgba(60,60,67,0.12)" stroke-width="1"/>';
+  });
+  const pts = values.map((v, i) => {
+    const x = padL + i * step + step / 2;
+    const y = padT + innerH * (1 - v / max);
+    return [x, y];
+  });
+  let path = '';
+  pts.forEach((p, i) => { path += (i === 0 ? 'M' : 'L') + p[0].toFixed(1) + ' ' + p[1].toFixed(1) + ' '; });
+  const base = (H - padB).toFixed(1);
+  const area = path + 'L' + pts[pts.length - 1][0].toFixed(1) + ' ' + base + ' L' + pts[0][0].toFixed(1) + ' ' + base + ' Z';
+  const dots = pts.map((p) => '<circle cx="' + p[0].toFixed(1) + '" cy="' + p[1].toFixed(1) + '" r="2" fill="' + color + '"/>').join('');
+  let labelsOut = '';
+  labels.forEach((l, i) => {
+    if (!l) return;
+    labelsOut += '<text x="' + pts[i][0].toFixed(1) + '" y="' + (H - 6) + '" font-size="9" fill="#86868B" text-anchor="middle">' + l + '</text>';
+  });
+  const maxLabel = '<text x="' + padL + '" y="' + (padT + 8) + '" font-size="9" fill="#86868B">' + max + '</text>';
+  return '<svg class="bar-svg" viewBox="0 0 ' + W + ' ' + H + '" preserveAspectRatio="xMidYMid meet" role="img" aria-label="line chart">'
+    + grid
+    + '<path d="' + area + '" fill="' + hexToRgba(color, 0.12) + '"/>'
+    + '<path d="' + path + '" fill="none" stroke="' + color + '" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>'
+    + dots + maxLabel + labelsOut + '</svg>';
+}
+
+/* ── Donut / pie ── */
+function donutChart(segments, topLabel, subLabel) {
+  const wrap = el('div', 'donut-wrap');
+  const size = 160, cx = 80, cy = 80, r = 60, sw = 22;
+  const C = 2 * Math.PI * r;
+  const GAP = 5; // px between segments so slices never blend together
+  const total = segments.reduce((s, x) => s + x.value, 0) || 0;
+  const svgBox = el('div', 'donut-svg');
+  svgBox.style.position = 'relative';
+  let circles = '';
+  let offset = 0;
+  segments.forEach((seg) => {
+    if (!total || seg.value <= 0) return;
+    const frac = seg.value / total;
+    const len = Math.max(2.5, frac * C - GAP);
+    circles += '<circle cx="' + cx + '" cy="' + cy + '" r="' + r + '" fill="none" stroke="' + seg.color + '" stroke-width="' + sw + '" stroke-dasharray="' + len.toFixed(2) + ' ' + (C - len).toFixed(2) + '" stroke-dashoffset="' + (-(offset * C) - GAP / 2).toFixed(2) + '" transform="rotate(-90 ' + cx + ' ' + cy + ')"/>';
+    offset += frac;
+  });
+  svgBox.innerHTML = '<svg width="' + size + '" height="' + size + '" viewBox="0 0 ' + size + ' ' + size + '" role="img" aria-label="pie chart">' + circles + '</svg>';
+  const center = el('div', 'donut-center');
+  center.appendChild(el('div', 'dc-top', topLabel));
+  center.appendChild(el('div', 'dc-sub', subLabel));
+  svgBox.appendChild(center);
+  wrap.appendChild(svgBox);
+
+  const legend = el('div', 'donut-legend');
+  segments.forEach((seg) => {
+    const row = el('div', 'legend-row');
+    const dot = el('span', 'legend-dot');
+    dot.style.background = seg.color;
+    row.appendChild(dot);
+    row.appendChild(el('span', 'legend-name', seg.name));
+    row.appendChild(el('span', 'legend-val', String(seg.value)));
+    row.appendChild(el('span', 'legend-pct', total ? Math.round(seg.value / total * 100) + '%' : ''));
+    legend.appendChild(row);
+  });
+  wrap.appendChild(legend);
+  return wrap;
+}
+
+/* ── Day timeline (time blocks) ── */
+function buildDayTimeline(events, nowMin) {
+  const wrap = el('div', 'timeline');
+  const H = 480;
+  const pxPerMin = H / 1440;
+
+  const gutter = el('div', 'timeline-gutter');
+  [0, 6, 12, 18, 24].forEach((h) => {
+    const s = el('span', '', pad2(h) + ':00');
+    s.style.top = (h / 24 * H) + 'px';
+    gutter.appendChild(s);
+  });
+
+  const canvas = el('div', 'timeline-canvas');
+  for (let h = 0; h <= 24; h++) {
+    const line = el('div', 'timeline-hour');
+    line.style.top = (h / 24 * H) + 'px';
+    if (h % 3 === 0) line.style.background = 'rgba(60,60,67,0.16)';
+    canvas.appendChild(line);
+  }
+
+  const blocks = events
+    .map((e) => ({ e, s: toMinutes(e.startTime), d: Math.max(30, toMinutes(e.endTime) - toMinutes(e.startTime)) }))
+    .sort((a, b) => a.s - b.s);
+  const lanes = [];
+  blocks.forEach((b) => {
+    let placed = false;
+    for (const lane of lanes) {
+      const last = lane[lane.length - 1];
+      if (b.s >= last.s + last.d) { lane.push(b); placed = true; break; }
+    }
+    if (!placed) lanes.push([b]);
+  });
+  const n = lanes.length || 1;
+  lanes.forEach((lane, li) => {
+    lane.forEach((b) => {
+      const top = b.s * pxPerMin;
+      const height = Math.max(18, b.d * pxPerMin);
+      const left = (li / n) * 100;
+      const width = (100 / n) - 0.8;
+      const color = EVENT_COLORS[b.e.color] || EVENT_COLORS.blue;
+      const block = el('button', 'timeline-block');
+      block.type = 'button';
+      block.setAttribute('aria-label', b.e.title + ', ' + b.e.startTime + '–' + b.e.endTime);
+      block.style.setProperty('--c', color);
+      block.style.background = hexToRgba(color, 0.16);
+      block.style.top = top + 'px';
+      block.style.height = height + 'px';
+      block.style.left = left + '%';
+      block.style.width = width + '%';
+      block.style.zIndex = String(li + 1);
+      block.appendChild(el('div', 'tb-title', b.e.title));
+      block.appendChild(el('div', 'tb-time', b.e.startTime + '–' + b.e.endTime));
+      if (height < 34) block.classList.add('is-tiny');
+      block.addEventListener('click', () => openEventSheet(b.e.id));
+      canvas.appendChild(block);
+    });
+  });
+
+  // "Now" line (only meaningful when viewing today)
+  if (typeof nowMin === 'number' && nowMin >= 0 && nowMin <= 1440) {
+    const now = el('div', 'timeline-now');
+    now.style.top = (nowMin * pxPerMin) + 'px';
+    canvas.appendChild(now);
+  }
+
+  wrap.append(gutter, canvas);
+  return wrap;
+}
+
+/* ── Week daily duration bars (time blocks per day) ── */
+function buildWeekDurationBars(events, mondayISO) {
+  const byDate = new Map();
+  events.forEach((e) => {
+    byDate.set(e.date, (byDate.get(e.date) || 0) + Math.max(0, toMinutes(e.endTime) - toMinutes(e.startTime)));
+  });
+  const labels = [];
+  const values = [];
+  for (let i = 0; i < 7; i++) {
+    const iso = addDaysISO(mondayISO, i);
+    labels.push(weekdayName(i));
+    values.push(Math.round(((byDate.get(iso) || 0) / 60) * 10) / 10);
+  }
+  return svgHost(barsSVG(labels, values, { color: EVENT_COLORS.green }));
+}
+
+/* ── Week columns (time blocks per day) ── */
+function buildWeekColumns(events, mondayISO) {
+  const wrap = el('div', 'week-cols');
+  const byDate = new Map();
+  events.forEach((e) => {
+    if (!byDate.has(e.date)) byDate.set(e.date, []);
+    byDate.get(e.date).push(e);
+  });
+  const today = todayISO();
+  for (let i = 0; i < 7; i++) {
+    const iso = addDaysISO(mondayISO, i);
+    const { m, d } = parseISO(iso);
+    const col = el('div', 'wcol');
+    if (iso === today) col.classList.add('is-today');
+    const head = el('div', 'wcol-head');
+    head.appendChild(el('span', 'wcol-dow', weekdayName(i)));
+    head.appendChild(el('span', 'wcol-date', appLang === 'zh' ? String(d) : monthName(m, false) + ' ' + d));
+    col.appendChild(head);
+    const body = el('div', 'wcol-body');
+    const evs = byDate.get(iso) || [];
+    evs.slice(0, 3).forEach((e) => {
+      const chip = el('div', 'wcol-chip');
+      const dot = el('span', 'wcol-dot');
+      dot.style.background = EVENT_COLORS[e.color] || EVENT_COLORS.blue;
+      const ttl = el('span', 'wcol-title', e.title);
+      ttl.title = e.startTime + ' ' + e.title;
+      chip.append(dot, ttl);
+      body.appendChild(chip);
+    });
+    if (evs.length > 3) body.appendChild(el('div', 'wcol-more', '+' + (evs.length - 3)));
+    if (!evs.length) body.appendChild(el('div', 'wcol-empty', '·'));
+    col.appendChild(body);
+    wrap.appendChild(col);
+  }
+  return wrap;
+}
+
+function chartEmpty() {
+  return el('div', 'chart-empty', t('noData'));
+}
+
+function statTilesRow(tiles) {
+  const row = el('div', 'stat-row');
+  tiles.forEach(([label, value]) => row.appendChild(statTile(label, value)));
+  return row;
+}
+
+function busiestDay(events) {
+  const byDate = new Map();
+  events.forEach((e) => byDate.set(e.date, (byDate.get(e.date) || 0) + 1));
+  let best = null;
+  byDate.forEach((v, k) => { if (!best || v > best.v) best = { date: k, v }; });
+  return best ? formatShortDate(best.date) : '—';
+}
+
+function renderInsights() {
+  const segHost = document.getElementById('insightsSeg');
+  const periodHost = document.getElementById('insightsPeriod');
+  const body = document.getElementById('insightsBody');
+  if (!segHost || !periodHost || !body) return;
+
+  // ── Segments 日/周/月/年
+  segHost.innerHTML = '';
+  [['day', 'segDay'], ['week', 'segWeek'], ['month', 'segMonth'], ['year', 'segYear']].forEach(([m, k]) => {
+    const b = el('button', 'seg-btn', t(k));
+    b.type = 'button';
+    b.setAttribute('role', 'tab');
+    if (insights.mode === m) b.classList.add('is-active');
+    b.addEventListener('click', () => { insights.mode = m; renderInsights(); });
+    segHost.appendChild(b);
+  });
+
+  // ── Period selector
+  periodHost.innerHTML = '';
+  const prevBtn = el('button', 'icon-btn');
+  prevBtn.type = 'button';
+  prevBtn.setAttribute('aria-label', t('prevMonth'));
+  prevBtn.innerHTML = I.chevLeft;
+  prevBtn.addEventListener('click', () => shiftInsights(-1));
+  const labelBtn = el('button', 'period-label');
+  labelBtn.type = 'button';
+  const lbl = el('span', '', insightsLabel());
+  const chev = el('span', 'chevron-down');
+  chev.innerHTML = I.chevDown;
+  labelBtn.append(lbl, chev);
+  labelBtn.addEventListener('click', openInsightsPicker);
+  const nextBtn = el('button', 'icon-btn');
+  nextBtn.type = 'button';
+  nextBtn.setAttribute('aria-label', t('nextMonth'));
+  nextBtn.innerHTML = I.chevRight;
+  nextBtn.addEventListener('click', () => shiftInsights(1));
+  periodHost.append(prevBtn, labelBtn, nextBtn);
+
+  // ── Body
+  body.innerHTML = '';
+  const evs = insightsEvents();
+
+  const card = () => body.appendChild(el('section', 'chart-card'));
+
+  const hourLabels = () => {
+    const labels = new Array(24).fill('');
+    [0, 6, 12, 18, 23].forEach((h) => { labels[h] = String(h); });
+    return labels;
+  };
+  const pieCard = () => {
+    const c = card();
+    c.appendChild(el('h3', 'chart-title', t('dayPie')));
+    const segs = categoryAgg(evs);
+    c.appendChild(segs.length ? donutChart(segs, String(evs.length), t('events')) : chartEmpty());
+  };
+  const distributionCard = () => {
+    const c = card();
+    c.appendChild(el('h3', 'chart-title', t('timeDistribution')));
+    const hist = hourHistogram(evs);
+    c.appendChild(evs.length ? svgHost(barsSVG(hourLabels(), hist, { color: EVENT_COLORS.blue })) : chartEmpty());
+  };
+
+  if (insights.mode === 'day') {
+    const c1 = card();
+    c1.appendChild(el('h3', 'chart-title', t('dayBlocks')));
+    const isToday = isoDate(insights.year, insights.month, insights.day) === todayISO();
+    c1.appendChild(evs.length ? buildDayTimeline(evs, isToday ? currentMinutes() : null) : chartEmpty());
+    pieCard();
+  } else if (insights.mode === 'week') {
+    pieCard();
+    // Time distribution by weekday (hours per day).
+    const c = card();
+    c.appendChild(el('h3', 'chart-title', t('timeDistribution')));
+    c.appendChild(evs.length ? buildWeekDurationBars(evs, insightsPeriod().start) : chartEmpty());
+    // Week blocks: 7 columns listing each day's events.
+    const c2 = card();
+    c2.appendChild(el('h3', 'chart-title', t('weekBlocks')));
+    c2.appendChild(evs.length ? buildWeekColumns(evs, insightsPeriod().start) : chartEmpty());
+  } else if (insights.mode === 'month') {
+    pieCard();
+    const c1 = card();
+    c1.appendChild(el('h3', 'chart-title', t('activity')));
+    c1.appendChild(statTilesRow([
+      [t('totalEvents'), String(evs.length)],
+      [t('activeDays'), String(new Set(evs.map((e) => e.date)).size)],
+      [t('totalHours'), Math.round(totalHours(evs) * 10) / 10 + t('hoursUnit')],
+      [t('busiestDay'), busiestDay(evs)],
+    ]));
+    const c2 = card();
+    c2.appendChild(el('h3', 'chart-title', t('activeTrend')));
+    const dim = daysInMonth(insights.year, insights.month);
+    const perDay = new Array(dim).fill(0);
+    evs.forEach((e) => { const d = parseISO(e.date).d; if (d >= 1 && d <= dim) perDay[d - 1] += 1; });
+    const dLabels = perDay.map((v, i) => (i === 0 || (i + 1) % 5 === 0 ? String(i + 1) : ''));
+    dLabels[dim - 1] = String(dim);
+    c2.appendChild(evs.length ? svgHost(lineSVG(dLabels, perDay, { color: EVENT_COLORS.purple })) : chartEmpty());
+    distributionCard();
+  } else {
+    pieCard();
+    const c1 = card();
+    c1.appendChild(el('h3', 'chart-title', t('activeTrend')));
+    const perMonth = new Array(12).fill(0);
+    evs.forEach((e) => { perMonth[parseISO(e.date).m] += 1; });
+    const mLabels = perMonth.map((v, i) => monthName(i, false));
+    c1.appendChild(evs.length ? svgHost(barsSVG(mLabels, perMonth, { color: EVENT_COLORS.purple })) : chartEmpty());
+    distributionCard();
+  }
+}
+
+/* ── Weeks of a year (for the week picker) ── */
+function weeksOfYear(y) {
+  const out = [];
+  const jan4 = new Date(y, 0, 4);
+  const dow = (jan4.getDay() + 6) % 7;
+  const mon = new Date(y, 0, 4 - dow);
+  const cur = new Date(mon);
+  for (let n = 1; n <= 53; n++) {
+    out.push({ n: n, monISO: isoDate(cur.getFullYear(), cur.getMonth(), cur.getDate()) });
+    cur.setDate(cur.getDate() + 7);
+    if (cur.getFullYear() > y && n >= 52) break;
+  }
+  return out;
+}
+
+/* ── Period picker sheet (year / month / week / day) ── */
+function openInsightsPicker() {
+  const pick = { year: insights.year, month: insights.month };
+  const body = el('div');
+
+  const yearRow = el('div', 'selector-year-row');
+  const prevY = el('button', 'year-arrow');
+  prevY.type = 'button';
+  prevY.setAttribute('aria-label', t('prevYear'));
+  prevY.innerHTML = I.chevLeft;
+  const nextY = el('button', 'year-arrow');
+  nextY.type = 'button';
+  nextY.setAttribute('aria-label', t('nextYear'));
+  nextY.innerHTML = I.chevRight;
+  const yearVal = el('span', 'year-value', String(pick.year));
+  yearRow.append(prevY, yearVal, nextY);
+  prevY.addEventListener('click', () => { pick.year--; yearVal.textContent = pick.year; renderGrid(); });
+  nextY.addEventListener('click', () => { pick.year++; yearVal.textContent = pick.year; renderGrid(); });
+
+  const gridHost = el('div');
+  body.append(yearRow, gridHost);
+
+  const api = openSheet({ title: t('selectDate'), body });
+
+  function renderGrid() {
+    gridHost.innerHTML = '';
+    const mode = insights.mode;
+
+    if (mode === 'year') {
+      const g = el('div', 'picker-week-grid');
+      g.style.gridTemplateColumns = 'repeat(3, 1fr)';
+      for (let Y = pick.year - 5; Y <= pick.year + 6; Y++) {
+        const b = el('button', 'pick-cell', String(Y));
+        b.type = 'button';
+        if (Y === insights.year) b.classList.add('is-current');
+        b.addEventListener('click', () => { insights.year = Y; api.close(); renderInsights(); });
+        g.appendChild(b);
+      }
+      gridHost.appendChild(g);
+    } else if (mode === 'month') {
+      const g = el('div', 'month-grid');
+      for (let m = 0; m < 12; m++) {
+        const b = el('button', 'month-cell', monthName(m, false));
+        b.type = 'button';
+        if (pick.year === insights.year && m === insights.month) b.classList.add('is-current');
+        b.addEventListener('click', () => { insights.year = pick.year; insights.month = m; api.close(); renderInsights(); });
+        g.appendChild(b);
+      }
+      gridHost.appendChild(g);
+    } else if (mode === 'day') {
+      const mg = el('div', 'month-grid');
+      for (let m = 0; m < 12; m++) {
+        const b = el('button', 'month-cell', monthName(m, false));
+        b.type = 'button';
+        if (m === pick.month) b.classList.add('is-current');
+        b.addEventListener('click', () => { pick.month = m; renderGrid(); });
+        mg.appendChild(b);
+      }
+      gridHost.appendChild(mg);
+      const dg = el('div', 'picker-day-grid');
+      const dim = daysInMonth(pick.year, pick.month);
+      for (let d = 1; d <= dim; d++) {
+        const b = el('button', 'pick-cell', String(d));
+        b.type = 'button';
+        if (pick.year === insights.year && pick.month === insights.month && d === insights.day) b.classList.add('is-current');
+        b.addEventListener('click', () => { insights.year = pick.year; insights.month = pick.month; insights.day = d; api.close(); renderInsights(); });
+        dg.appendChild(b);
+      }
+      gridHost.appendChild(dg);
+    } else {
+      const g = el('div', 'picker-week-grid');
+      const anchor = insights.mode === 'week' ? mondayOf(insights.year, insights.month, insights.day) : null;
+      weeksOfYear(pick.year).forEach((w) => {
+        const b = el('button', 'pick-cell');
+        b.type = 'button';
+        const mm = parseISO(w.monISO);
+        const sub = el('span', 'pc-sub', (mm.m + 1) + '/' + mm.d);
+        b.appendChild(document.createTextNode('W' + w.n));
+        b.appendChild(sub);
+        if (anchor === w.monISO) b.classList.add('is-current');
+        b.addEventListener('click', () => {
+          const p = parseISO(w.monISO);
+          insights.year = p.y; insights.month = p.m; insights.day = p.d;
+          api.close(); renderInsights();
+        });
+        g.appendChild(b);
+      });
+      gridHost.appendChild(g);
+    }
+  }
+  renderGrid();
+}
+
+/* ============================================================
+   20. NAVIGATION & RENDERING
+   ============================================================ */
+
+function showScreen(name) {
+  document.querySelectorAll('.screen').forEach((s) => {
+    const active = s.id === 'screen-' + name;
+    s.classList.toggle('is-active', active);
+    if (active) s.removeAttribute('hidden');
+    else s.setAttribute('hidden', '');
+  });
+}
+
+function updateMonthTitle() {
+  const elt = document.getElementById('monthTitleText');
+  elt.textContent = appLang === 'zh'
+    ? state.viewYear + '年' + (state.viewMonth + 1) + '月'
+    : MONTHS_LONG[state.viewMonth] + ' ' + state.viewYear;
+}
+
+function updateTodayButton() {
+  const btn = document.getElementById('btnTodayTop');
+  const n = new Date();
+  const onToday = state.viewYear === n.getFullYear() &&
+    state.viewMonth === n.getMonth() &&
+    state.selectedDate === todayISO();
+  btn.classList.toggle('is-muted', onToday);
+}
+
+function refreshCalendar() {
+  updateMonthTitle();
+  renderCalendarGrid();
+  renderDayDetail();
+  updateTodayButton();
+}
+
+function refreshAll() {
+  refreshCalendar();
+  renderTodayScreen();
+  renderMoreScreen();
+  renderInsights();
+}
+
+async function refreshEvents() {
+  state.events = await DataService.fetchAll();
+}
+
+async function refreshCategories() {
+  state.categories = await DataService.fetchCategories();
+}
+
+function showTab(tab) {
+  state.tab = tab;
+  showScreen(tab);
+  document.querySelectorAll('.tab-item').forEach((b) => {
+    const on = b.dataset.tab === tab;
+    b.classList.toggle('is-active', on);
+    if (on) b.setAttribute('aria-current', 'page');
+    else b.removeAttribute('aria-current');
+  });
+  moveTabIndicator();
+  window.scrollTo({ top: 0 });
+  refreshAll();
+}
+
+/* Slide the shared Liquid Glass active capsule to the active tab. */
+function moveTabIndicator() {
+  const indicator = document.getElementById('tabIndicator');
+  if (!indicator) return;
+  const active = document.querySelector('.tabbar-capsule .tab-item.is-active');
+  if (!active) return;
+  const x = active.offsetLeft;
+  const w = active.offsetWidth;
+  indicator.style.transform = 'translate(' + x + 'px, -1px)';
+  indicator.style.width = w + 'px';
+}
+
+function goToToday() {
+  const n = new Date();
+  state.viewYear = n.getFullYear();
+  state.viewMonth = n.getMonth();
+  state.selectedDate = todayISO();
+  if (state.tab !== 'calendar') showTab('calendar');
+  else refreshCalendar();
+}
+
+function prevMonth() { animateMonthChange(-1); }
+function nextMonth() { animateMonthChange(1); }
+
+/* ============================================================
+   21. WIRING
+   ============================================================ */
+
+function wireNavigation() {
+  document.querySelectorAll('.tab-item').forEach((btn) => {
+    btn.addEventListener('click', () => showTab(btn.dataset.tab));
+  });
+  document.getElementById('monthNavPrev').addEventListener('click', prevMonth);
+  document.getElementById('monthNavNext').addEventListener('click', nextMonth);
+  document.getElementById('monthTitleBtn').addEventListener('click', openMonthSelector);
+  document.getElementById('btnTodayTop').addEventListener('click', goToToday);
+  document.getElementById('btnAddDay').addEventListener('click', () => openEventSheet(null));
+  document.getElementById('btnAddToday').addEventListener('click', () => openEventSheet(null, { date: todayISO() }));
+}
+
+function wireImportFile() {
+  document.getElementById('importFile').addEventListener('change', async (e) => {
+    const file = e.target.files && e.target.files[0];
+    if (!file) return;
+    try {
+      const text = await file.text();
+      const data = JSON.parse(text);
+      const res = await DataService.importAll(data);
+      // Linked import: categories come along in the same backup file.
+      if (data && Array.isArray(data.categories)) {
+        const merged = state.categories.slice();
+        data.categories.forEach((c) => {
+          const cat = normalizeCategory(c);
+          const i = merged.findIndex((x) => x.name.toLowerCase() === cat.name.toLowerCase());
+          if (i >= 0) merged[i] = cat; else merged.push(cat);
+        });
+        await DataService.saveCategories(merged);
+        await refreshCategories();
+      }
+      await refreshEvents();
+      refreshAll();
+      const n = res.added + res.updated;
+      toast(t('imported', { n: n }));
+    } catch (err) {
+      toast(t('importFailed'));
+    }
+  });
+}
+
+/* ============================================================
+   22. INIT
+   ============================================================ */
+
+async function init() {
+  // Load saved language before first render.
+  const savedLang = await DataService.getSetting('lang');
+  if (savedLang === 'zh' || savedLang === 'en') appLang = savedLang;
+  document.documentElement.lang = appLang === 'zh' ? 'zh-CN' : 'en';
+
+  buildWeekdayHeader();
+  wireNavigation();
+  wireImportFile();
+  enableSwipe();
+
+  await refreshEvents();
+  await refreshCategories();
+
+  // One-time demo seed: ONLY when no stored data exists. Never overwrites.
+  if (StorageService.wasFresh) {
+    await DataService.importAll(buildDemoEvents());
+    await refreshEvents();
+  }
+  if (StorageService.categoriesFresh) {
+    await DataService.saveCategories(DEFAULT_CATEGORIES.map(normalizeCategory));
+    await refreshCategories();
+  }
+
+  applyStaticTranslations();
+  refreshAll();
+  setInterval(updateNow, 30000);
+
+  // Position the Liquid Glass active capsule and keep it aligned.
+  requestAnimationFrame(moveTabIndicator);
+  window.addEventListener('resize', moveTabIndicator);
+  window.addEventListener('orientationchange', moveTabIndicator);
+  if (document.fonts && document.fonts.ready) {
+    document.fonts.ready.then(() => { moveTabIndicator(); }).catch(() => {});
+  }
+
+  if (!StorageService.available) {
+    toast('Preview: local storage is unavailable here');
+  } else if (StorageService.corrupt) {
+    toast('Some stored data was damaged — a backup was preserved');
+  }
+}
+
+document.addEventListener('DOMContentLoaded', init);
