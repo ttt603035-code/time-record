@@ -7,6 +7,7 @@ import { buildDemoEvents } from '@/lib/demo-data.js';
 import { importFromShortcutURL } from '@/lib/shortcut-import.js';
 import { getLang, setLang, t } from '@/lib/i18n.js';
 import { toast } from '@/lib/overlays.js';
+import { DEFAULT_THEME, applyTheme } from '@/lib/themes.js';
 
 /**
  * The React replacement for the legacy global `state` object + `refreshAll()`.
@@ -26,6 +27,7 @@ export function useAppData() {
   const [events, setEvents] = useState([]);
   const [categories, setCategories] = useState([]);
   const [lang, setLangState] = useState(getLang());
+  const [theme, setThemeState] = useState(DEFAULT_THEME);
   const [ready, setReady] = useState(false);
   const initStarted = useRef(false);
 
@@ -54,6 +56,11 @@ export function useAppData() {
         setLangState(savedLang);
       }
       document.documentElement.lang = getLang() === 'zh' ? 'zh-CN' : 'en';
+
+      // Theme is a pure UI preference and shares the settings record with the
+      // language, so it needs no new storage key or data-structure change.
+      const savedTheme = await DataService.getSetting('theme');
+      setThemeState(applyTheme(savedTheme));
 
       await refreshEvents();
       let cats = await refreshCategories();
@@ -119,6 +126,11 @@ export function useAppData() {
     return refreshEvents();
   }, [refreshEvents]);
 
+  const applyThemeChoice = useCallback(async (next) => {
+    setThemeState(applyTheme(next));
+    await DataService.setSetting('theme', next);
+  }, []);
+
   const applyLanguage = useCallback(async (next) => {
     setLang(next);
     setLangState(next);
@@ -131,6 +143,7 @@ export function useAppData() {
     events,
     categories,
     lang,
+    theme,
     ready,
     refreshEvents,
     refreshCategories,
@@ -140,5 +153,6 @@ export function useAppData() {
     saveCategories,
     clearAll,
     applyLanguage,
+    applyTheme: applyThemeChoice,
   };
 }

@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 
 import { openImportGuide } from '@/components/ImportGuideModal.jsx';
 import { useAlertDialog } from '@/hooks/useAlertDialog.jsx';
+import { THEMES } from '@/lib/themes.js';
 import { openTemplatesModal } from '@/components/TemplatesModal.jsx';
 import { Button } from '@/components/ui/button.jsx';
 import {
@@ -80,7 +81,8 @@ function SettingsRow({ icon, label, value, onClick }) {
 }
 
 export function MorePage({
-  events, categories, lang, onSaveCategories, onClearAll, onApplyLanguage, onImported,
+  events, categories, lang, theme, onSaveCategories, onClearAll, onApplyLanguage,
+  onApplyTheme, onImported,
 }) {
   const fileInputRef = useRef(null);
   const [keysOpen, setKeysOpen] = useState(false);
@@ -296,6 +298,63 @@ export function MorePage({
                 ))}
               </CollapsibleContent>
             </Collapsible>
+          </CardContent>
+        </Card>
+
+        {/* ── Appearance */}
+        <Card className="gap-4 py-4">
+          <CardHeader className="gap-1 px-4">
+            <CardTitle className="text-[15px] font-bold tracking-tight">
+              {t('appearance')}
+            </CardTitle>
+            <CardDescription className="text-xs leading-relaxed">
+              {t('appearanceDesc')}
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="flex flex-wrap gap-3 px-4">
+            {THEMES.map((th) => {
+              const on = theme === th.id;
+              return (
+                <button
+                  key={th.id}
+                  type="button"
+                  aria-label={t(th.labelKey)}
+                  aria-pressed={on}
+                  onClick={() => onApplyTheme(th.id)}
+                  className="flex flex-col items-center gap-1.5"
+                >
+                  <span
+                    className={cn(
+                      'inline-flex size-[34px] items-center justify-center rounded-full',
+                      'text-white transition-transform active:scale-90',
+                      on && 'scale-110 ring-2 ring-offset-2 ring-offset-background',
+                    )}
+                    style={{
+                      background: th.swatch,
+                      ...(on ? { '--tw-ring-color': th.swatch } : null),
+                    }}
+                  >
+                    <svg
+                      viewBox="0 0 24 24"
+                      aria-hidden="true"
+                      className={cn('size-4 transition-opacity', on ? 'opacity-100' : 'opacity-0')}
+                    >
+                      <path
+                        d="M5 12.5l4.5 4.5L19 7.5"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="2.6"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                      />
+                    </svg>
+                  </span>
+                  <span className="text-[11px] font-medium text-muted-foreground">
+                    {t(th.labelKey)}
+                  </span>
+                </button>
+              );
+            })}
           </CardContent>
         </Card>
 

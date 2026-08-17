@@ -2,14 +2,15 @@ import { COLOR_ORDER, EVENT_COLORS } from '@/lib/constants.js';
 import { cn } from '@/lib/utils.js';
 
 /**
- * The five-colour picker, shared by the event form and the template form.
+ * The colour picker, shared by the event form and the template form.
  *
  * Extracted during the phase-2 shadcn work: both forms had their own copy of
- * this markup and selection logic.
+ * this markup and selection logic. Wraps onto multiple rows now that the
+ * palette covers the full set of Apple system colours.
  */
 export function ColorSwatches({ value, onChange }) {
   return (
-    <div className="flex gap-3">
+    <div className="flex flex-wrap gap-3">
       {COLOR_ORDER.map((c) => {
         const on = value === c;
         return (

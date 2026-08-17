@@ -2046,3 +2046,68 @@ textarea.text-input { resize: none; line-height: 1.45; }
   from { opacity: 1; transform: translate(-50%, -50%) scale(1); }
   to   { opacity: 0; transform: translate(-50%, -46%) scale(0.94); }
 }
+
+/* ═══════════════ Donut focus ring ═══════════════
+   Recharts puts tabindex="0" on its own <svg class="recharts-surface"> and on
+   the <g class="recharts-pie"> wrapper. The global [tabindex]:focus-visible
+   rule then draws a rectangle around the whole square chart area whenever the
+   donut is tapped — which is the grey box, not a sector outline. The sectors
+   carry their own role/aria-label and are what should be focusable, so drop
+   the ring on the two Recharts-owned wrappers only. */
+.donut-svg .recharts-surface:focus,
+.donut-svg .recharts-surface:focus-visible,
+.donut-svg .recharts-pie:focus,
+.donut-svg .recharts-pie:focus-visible {
+  outline: none;
+}
+
+/* ═══════════════ More cards ═══════════════
+   Match the Calendar surface: the app's own hairline border and soft shadow,
+   rather than the shadcn defaults, so the two screens read as one design. */
+#screen-more [data-slot='card'] {
+  border-color: var(--border);
+  box-shadow: var(--shadow-sm);
+}
+
+/* ═══════════════ Themes ═══════════════
+   A theme only re-tints --accent (selected day, primary buttons, focus rings,
+   links) and its soft variant. Surfaces, text and the event colour palette are
+   intentionally untouched, so switching theme can never reduce contrast or
+   change how saved data looks. The default theme sets no attribute and simply
+   uses the :root values above. */
+
+[data-theme='blue'] {
+  --accent: #5B8DBE;
+  --accent-soft: rgba(91, 141, 190, 0.12);
+  /* Keep the shadcn primitives (Button, focus rings) on the same tint. */
+  --sh-primary: 210 43% 55%;
+  --sh-ring: 210 43% 55%;
+}
+[data-theme='sage'] {
+  --accent: #6FA88C;
+  --accent-soft: rgba(111, 168, 140, 0.12);
+  /* Keep the shadcn primitives (Button, focus rings) on the same tint. */
+  --sh-primary: 151 25% 55%;
+  --sh-ring: 151 25% 55%;
+}
+[data-theme='clay'] {
+  --accent: #C08A6E;
+  --accent-soft: rgba(192, 138, 110, 0.12);
+  /* Keep the shadcn primitives (Button, focus rings) on the same tint. */
+  --sh-primary: 20 39% 59%;
+  --sh-ring: 20 39% 59%;
+}
+[data-theme='lavender'] {
+  --accent: #9186C4;
+  --accent-soft: rgba(145, 134, 196, 0.12);
+  /* Keep the shadcn primitives (Button, focus rings) on the same tint. */
+  --sh-primary: 251 34% 65%;
+  --sh-ring: 251 34% 65%;
+}
+[data-theme='rose'] {
+  --accent: #C4808F;
+  --accent-soft: rgba(196, 128, 143, 0.12);
+  /* Keep the shadcn primitives (Button, focus rings) on the same tint. */
+  --sh-primary: 347 37% 64%;
+  --sh-ring: 347 37% 64%;
+}

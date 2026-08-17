@@ -30,6 +30,7 @@ export default function App() {
     events, categories, lang,
     createEvent, updateEvent, removeEvent,
     saveCategories, clearAll, applyLanguage,
+    theme, applyTheme,
     refreshEvents, refreshCategories,
   } = useAppData();
 
@@ -169,9 +170,11 @@ export default function App() {
           events={events}
           categories={categories}
           lang={lang}
+          theme={theme}
           onSaveCategories={saveCategories}
           onClearAll={clearAll}
           onApplyLanguage={applyLanguage}
+          onApplyTheme={applyTheme}
           onImported={refreshAfterImport}
         />
       ) : null}

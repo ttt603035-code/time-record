@@ -8,6 +8,7 @@
  */
 import { readFileSync } from 'node:fs';
 import { JSDOM, VirtualConsole } from 'jsdom';
+import { COLOR_ORDER, EVENT_COLORS } from './src/lib/constants.js';
 
 import { existsSync } from 'node:fs';
 // Prefer the single-chunk test build (see TR_SINGLE_BUNDLE in vite.config.js):
@@ -300,7 +301,8 @@ await tick(500);
 check('More screen mounts', !!$(doc, '#screen-more'));
 // Phase 2: the More screen is React + shadcn (Card / Separator / Collapsible),
 // so structure is identified by data-slot rather than legacy class names.
-check('Data / Language / About cards', $$(doc, '[data-slot="card"]').length === 3,
+check('Data / Appearance / Language / About cards',
+  $$(doc, '[data-slot="card"]').length === 4,
   `${$$(doc, '[data-slot="card"]').length} cards`);
 check('Data stat tiles', $$(doc, '[data-slot="card-content"] .grid-cols-3 > div').length === 3);
 const dataActions = $$(doc, '[data-slot="card-content"] [data-slot="button"]');
@@ -347,11 +349,19 @@ check('Add Template button', !!modalBtn('Add Template'));
 clickEl(window, $$(doc, '.study-modal button').find((b) => b.textContent.includes('English')));
 await tick(600);
 check('Template edit form opens prefilled', $(doc, '#tpl-name')?.value === 'English');
-check('Template colour picker has 5 swatches',
-  $$(doc, '.study-modal button[aria-label^="Color "]').length === 5);
+check('Colour picker offers the full palette',
+  $$(doc, '.study-modal button[aria-label^="Color "]').length === COLOR_ORDER.length,
+  `${$$(doc, '.study-modal button[aria-label^="Color "]').length} swatches`);
+// The original five must still be offered under their original names: saved
+// events and the Shortcut both store these strings.
+check('Original five colours still present',
+  ['blue', 'purple', 'pink', 'green', 'orange'].every((c) =>
+    $$(doc, '.study-modal button[aria-label^="Color "]')
+      .some((b) => b.getAttribute('aria-label') === `Color ${c}`)));
 setReactValue(window, $(doc, '#tpl-name'), 'English Reading');
 await tick(200);
-clickEl(window, $$(doc, '.study-modal button[aria-label^="Color "]')[2]); // pink
+clickEl(window, $$(doc, '.study-modal button[aria-label^="Color "]')
+  .find((b) => b.getAttribute('aria-label') === 'Color pink'));
 await tick(200);
 clickEl(window, primaryBtn());
 await tick(800);
@@ -430,8 +440,15 @@ check('Form uses shadcn inputs',
   && $$(doc, '.study-modal [data-slot="textarea"]').length === 1,
   `${$$(doc, '.study-modal [data-slot="input"]').length} inputs, ${$$(doc, '.study-modal [data-slot="textarea"]').length} textarea`);
 check('Category quick-pick chips', $$(doc, '.study-modal [aria-pressed]').length >= 6);
-check('Five color swatches',
-  $$(doc, '.study-modal button[aria-label^="Color "]').length === 5);
+check('Colour picker offers the full palette',
+  $$(doc, '.study-modal button[aria-label^="Color "]').length === COLOR_ORDER.length,
+  `${$$(doc, '.study-modal button[aria-label^="Color "]').length} swatches`);
+// The original five must still be offered under their original names: saved
+// events and the Shortcut both store these strings.
+check('Original five colours still present',
+  ['blue', 'purple', 'pink', 'green', 'orange'].every((c) =>
+    $$(doc, '.study-modal button[aria-label^="Color "]')
+      .some((b) => b.getAttribute('aria-label') === `Color ${c}`)));
 check('Datalist suggestions present', !!$(doc, '#catSuggestions'));
 
 // Open the date wheel.
@@ -773,6 +790,43 @@ check('CSS: safe-area insets retained', css.includes('safe-area-inset'));
 check('CSS: touch-action retained', css.includes('touch-action'));
 check('CSS: no tap highlight retained', css.includes('-webkit-tap-highlight-color'));
 check('CSS: reduced-motion block retained', css.includes('prefers-reduced-motion'));
+
+// ── Palette ──────────────────────────────────────────────────────────────
+// The original five names are a data contract: saved events and the Apple
+// Shortcut both store these strings, and the legacy app at the repo root
+// renders the same hexes. Their values must never drift.
+check('Palette: original five hexes unchanged',
+  EVENT_COLORS.blue === '#6FA8DC' && EVENT_COLORS.purple === '#B49BD9'
+  && EVENT_COLORS.pink === '#F0A3B6' && EVENT_COLORS.green === '#86C79B'
+  && EVENT_COLORS.orange === '#F1B973');
+check('Palette: every ordered key has a colour',
+  COLOR_ORDER.every((k) => /^#[0-9A-F]{6}$/i.test(EVENT_COLORS[k] || '')),
+  `${COLOR_ORDER.length} colours`);
+check('Palette: no duplicate colours',
+  new Set(COLOR_ORDER.map((k) => EVENT_COLORS[k])).size === COLOR_ORDER.length);
+
+// ── Themes ───────────────────────────────────────────────────────────────
+// A theme may only re-tint the accent. If one ever redefines a surface, text
+// or event colour it could silently wreck contrast or change how data looks.
+const themeBlocks = [...css.matchAll(/\[data-theme=.?\w+.?\]\{([^}]*)\}/g)].map((m) => m[1]);
+check('Themes: defined in CSS', themeBlocks.length >= 5, `${themeBlocks.length} themes`);
+check('Themes: only re-tint the accent, never surfaces/text/event colours',
+  themeBlocks.every((b) => !/--c-|--surface|--text|--bg:/.test(b)));
+check('Themes: keep the shadcn primitives on the same tint',
+  themeBlocks.every((b) => b.includes('--sh-primary')));
+
+// ── Donut focus ring ─────────────────────────────────────────────────────
+// Recharts puts tabindex="0" on its own <svg>, which the global
+// [tabindex]:focus-visible rule turns into a grey box around the whole chart.
+check('Donut: no focus rectangle on the Recharts wrappers',
+  /\.recharts-surface:focus/.test(css) && /\.recharts-pie:focus-visible/.test(css));
+
+// ── More cards ───────────────────────────────────────────────────────────
+const moreCardRule = css.replace(/\s+/g, '').match(/#screen-more\[data-slot=.?card.?\]\{[^}]*\}/)?.[0] || '';
+check('More cards use the app border + shadow, like the Calendar surface',
+  moreCardRule.includes('border-color:var(--border)')
+  && moreCardRule.includes('box-shadow:var(--shadow-sm)'),
+  moreCardRule);
 
 // ── Page entrance animation ──────────────────────────────────────────────
 // Subtle by contract: one animation on the screen container, 250–400ms, eased,
