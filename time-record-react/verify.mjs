@@ -9,16 +9,21 @@
 import { readFileSync } from 'node:fs';
 import { JSDOM, VirtualConsole } from 'jsdom';
 
+import { existsSync } from 'node:fs';
+// Prefer the single-chunk test build (see TR_SINGLE_BUNDLE in vite.config.js):
+// jsdom runs the bundle as one classic script and cannot follow dynamic imports.
+const DIST = existsSync('dist-test/index.html') ? 'dist-test' : 'dist';
+
 const results = [];
 function check(name, ok, extra = '') {
   results.push({ name, ok, extra });
   console.log(`${ok ? 'PASS' : 'FAIL'}  ${name}${extra ? ' — ' + extra : ''}`);
 }
 
-const html = readFileSync('dist/index.html', 'utf8');
+const html = readFileSync(`${DIST}/index.html`, 'utf8');
 const cssFile = html.match(/assets\/(index-[\w-]+\.css)/)[1];
 const jsFile = html.match(/assets\/(index-[\w-]+\.js)/)[1];
-const bundle = readFileSync(`dist/assets/${jsFile}`, 'utf8');
+const bundle = readFileSync(`${DIST}/assets/${jsFile}`, 'utf8');
 
 const errors = [];
 
@@ -157,8 +162,10 @@ const monthSeg = $$(doc, '.seg-btn').find((b) => b.textContent === 'Month');
 clickEl(window, monthSeg);
 await tick(600);
 check('Month range activates', $(doc, '.seg-btn.is-active')?.textContent === 'Month');
-check('Donut segments drawn', $$(doc, '.donut-svg circle[data-key]').length > 0,
-  `${$$(doc, '.donut-svg circle[data-key]').length} segments`);
+// Phase 2: the donut is a shadcn Chart (Recharts). Segments are sector paths
+// with their own role/aria-label rather than the old hit-area circles.
+check('Donut segments drawn', $$(doc, '.donut-svg path[role="button"]').length > 0,
+  `${$$(doc, '.donut-svg path[role="button"]').length} segments`);
 // Segments are annular-sector paths with independently controlled corner radii
 // (spec: 0.25–0.4x thickness), not stroke-linecap="round" which is locked to
 // 0.5x. donut-spec.mjs measures the rendered geometry in detail.
@@ -614,7 +621,7 @@ check('Corrupt payload is backed up, never destroyed', backupKeys.length === 1,
 check('App still renders after corrupt data', !!$(doc, '#calendarGrid .day'));
 
 /* ══════════════ 11. PWA / SAFARI META ══════════════ */
-const distHtml = readFileSync('dist/index.html', 'utf8');
+const distHtml = readFileSync(`${DIST}/index.html`, 'utf8');
 check('PWA: manifest linked', distHtml.includes('rel="manifest"'));
 check('PWA: apple-mobile-web-app-capable', distHtml.includes('apple-mobile-web-app-capable'));
 check('PWA: apple-mobile-web-app-title = Time Record',
@@ -634,7 +641,7 @@ check('Manifest: display standalone', manifest.display === 'standalone');
 check('Manifest: 192 + 512 maskable icons',
   manifest.icons.length === 2 && manifest.icons.every((i) => i.purpose === 'any maskable'));
 
-const css = readFileSync(`dist/assets/${cssFile}`, 'utf8');
+const css = readFileSync(`${DIST}/assets/${cssFile}`, 'utf8');
 check('CSS: safe-area insets retained', css.includes('safe-area-inset'));
 check('CSS: touch-action retained', css.includes('touch-action'));
 check('CSS: no tap highlight retained', css.includes('-webkit-tap-highlight-color'));

@@ -2,7 +2,6 @@ import { useEffect, useRef } from 'react';
 
 import { EVENT_COLORS } from '@/lib/constants.js';
 import { hexToRgba, svgHost } from '@/lib/dom.js';
-import { fmtTimeShort } from '@/lib/analytics.js';
 
 /**
  * Hand-drawn trend chart (bar or line) — ported verbatim from legacy
@@ -23,7 +22,6 @@ export function trendSVG(labels, values, opts) {
     const y = padT + innerH * (1 - f);
     grid += '<line x1="' + padL + '" y1="' + y.toFixed(1) + '" x2="' + (W - padR) + '" y2="' + y.toFixed(1) + '" stroke="rgba(60,60,67,0.10)" stroke-width="1"/>';
   });
-  const maxLabel = '<text x="' + padL + '" y="' + (padT + 9) + '" font-size="9.5" fill="#86868B">' + fmtTimeShort(max) + '</text>';
   let marks = '', labelsOut = '', hits = '';
   const bw = Math.max(3, Math.min(13, step * 0.55));
   if (type === 'line') {
@@ -63,7 +61,7 @@ export function trendSVG(labels, values, opts) {
     });
   }
   const svg = '<svg class="bar-svg trend-svg" viewBox="0 0 ' + W + ' ' + H + '" preserveAspectRatio="xMidYMid meet" role="img" aria-label="trend chart">'
-    + grid + marks + maxLabel + labelsOut + hits + '</svg>';
+    + grid + marks + labelsOut + hits + '</svg>';
   return svgHost(svg);
 }
 

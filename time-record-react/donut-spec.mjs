@@ -18,6 +18,11 @@ import { Resvg } from '@resvg/resvg-js';
 import { PNG } from 'pngjs';
 import { JSDOM, VirtualConsole } from 'jsdom';
 
+import { existsSync } from 'node:fs';
+// Prefer the single-chunk test build (see TR_SINGLE_BUNDLE in vite.config.js):
+// jsdom runs the bundle as one classic script and cannot follow dynamic imports.
+const DIST = existsSync('dist-test/index.html') ? 'dist-test' : 'dist';
+
 const SIZE = 196;
 const R = SIZE * 0.37;
 const SW = SIZE * 0.125;
@@ -25,9 +30,9 @@ const S = 8; // supersample factor for measurement
 
 /** Boot the built app in jsdom and pull out the rendered donut SVG. */
 async function renderDonutSVG(events) {
-  const html = readFileSync('dist/index.html', 'utf8');
+  const html = readFileSync(`${DIST}/index.html`, 'utf8');
   const jsFile = html.match(/assets\/(index-[\w-]+\.js)/)[1];
-  const bundle = readFileSync(`dist/assets/${jsFile}`, 'utf8');
+  const bundle = readFileSync(`${DIST}/assets/${jsFile}`, 'utf8');
 
   const dom = new JSDOM(html.replace(/<script[^>]*src="[^"]*"[^>]*><\/script>/g, ''), {
     url: 'https://x.test/t/', runScripts: 'dangerously',
@@ -114,15 +119,26 @@ function measure(svg) {
     if (r.v && r.len > widest) { widest = r.len; best = acc + r.len / 2; }
     acc += r.len;
   });
+  // Probe a few angles around the widest segment's midpoint and keep the best
+  // reading: a single ray can land exactly in an inter-segment gap (notably
+  // with equal-sized slices) and measure zero.
   const midA = (best / (2 * Math.PI * R)) * 2 * Math.PI - Math.PI / 2;
-  let inner = null, outer = null;
-  for (let rr = R * 0.5; rr < R * 1.5; rr += 0.2) {
-    if (isInk(at(cx + rr * S * Math.cos(midA), cy + rr * S * Math.sin(midA)))) {
-      if (inner === null) inner = rr;
-      outer = rr;
+  let thickness = 0;
+  // Sweep a wide span: the rounded corners taper the ends, so the true ring
+  // thickness is only reached away from them.
+  const offsets = [];
+  for (let o = -0.25; o <= 0.25; o += 0.01) offsets.push(o);
+  for (const off of offsets) {
+    const a = midA + off;
+    let inner = null, outer = null;
+    for (let rr = R * 0.5; rr < R * 1.5; rr += 0.2) {
+      if (isInk(at(cx + rr * S * Math.cos(a), cy + rr * S * Math.sin(a)))) {
+        if (inner === null) inner = rr;
+        outer = rr;
+      }
     }
+    if (inner !== null) thickness = Math.max(thickness, outer - inner);
   }
-  const thickness = outer - inner;
 
   // Corner radius: at a segment's trailing end, compare how far the ink
   // reaches at the outer edge versus the centreline. A square end gives ~0;

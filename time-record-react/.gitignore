@@ -12,3 +12,4 @@ test-results
 # Local spec/measurement scratch output
 donut-rendered.svg
 donut-check.png
+dist-test

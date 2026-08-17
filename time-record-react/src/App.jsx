@@ -1,4 +1,4 @@
-import { useCallback, useRef, useState } from 'react';
+import { Suspense, lazy, useCallback, useRef, useState } from 'react';
 
 import { BottomTabBar } from '@/components/BottomTabBar.jsx';
 import { openEventForm } from '@/components/EventFormModal.jsx';
@@ -9,7 +9,16 @@ import { daysInMonth, isoDate, parseISO, todayISO } from '@/lib/date.js';
 import { CalendarPage } from '@/pages/Calendar.jsx';
 import { MorePage } from '@/pages/More.jsx';
 import { TodayPage } from '@/pages/Today.jsx';
-import { InsightsPage } from '@/pages/insights/Insights.jsx';
+
+/**
+ * Insights pulls in the charting library (Recharts), which is by far the
+ * heaviest dependency in the app. It is loaded on demand the first time the
+ * tab is opened so that Today/Calendar — the screens that open on launch —
+ * are not made slower by it.
+ */
+const InsightsPage = lazy(() =>
+  import('@/pages/insights/Insights.jsx').then((m) => ({ default: m.InsightsPage })),
+);
 
 /**
  * App shell — the React replacement for the legacy `showTab` / `showScreen`
@@ -135,22 +144,24 @@ export default function App() {
       ) : null}
 
       {tab === 'insights' ? (
-        <InsightsPage
-          periodEvents={insights.periodEvents}
-          categories={categories}
-          range={insights.range}
-          label={insights.label}
-          setMode={insights.setMode}
-          shift={insights.shift}
-          pick={insights.pick}
-          route={analytics.route}
-          selected={analytics.selected}
-          setSelected={analytics.setSelected}
-          dir={analytics.dir}
-          onGo={analytics.go}
-          onBack={analytics.back}
-          onEditEvent={handleEditEvent}
-        />
+        <Suspense fallback={<div className="screen" />}>
+          <InsightsPage
+            periodEvents={insights.periodEvents}
+            categories={categories}
+            range={insights.range}
+            label={insights.label}
+            setMode={insights.setMode}
+            shift={insights.shift}
+            pick={insights.pick}
+            route={analytics.route}
+            selected={analytics.selected}
+            setSelected={analytics.setSelected}
+            dir={analytics.dir}
+            onGo={analytics.go}
+            onBack={analytics.back}
+            onEditEvent={handleEditEvent}
+          />
+        </Suspense>
       ) : null}
 
       {tab === 'more' ? (
