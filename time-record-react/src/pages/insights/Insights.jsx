@@ -1,6 +1,6 @@
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 
-import { openInsightsPicker } from '@/components/InsightsPickerSheet.js';
+import { InsightsPickerSheet } from '@/components/InsightsPickerSheet.jsx';
 import { PeriodSelector } from '@/components/insights/PeriodSelector.jsx';
 import { RangeSegments } from '@/components/insights/RangeSegments.jsx';
 import { categoryAgg, categoryNameOf } from '@/lib/analytics.js';
@@ -32,6 +32,8 @@ export function InsightsPage({
   onBack,
   onEditEvent,
 }) {
+  const [pickerOpen, setPickerOpen] = useState(false);
+
   const navSeg = useMemo(() => {
     if (route.level !== 'category' || !route.category) return null;
     return categoryAgg(periodEvents, categories).find((s) => s.key === route.category);
@@ -75,7 +77,7 @@ export function InsightsPage({
         label={label}
         onPrev={() => shift(-1)}
         onNext={() => shift(1)}
-        onPick={() => openInsightsPicker({ range, onPick: pick })}
+        onPick={() => setPickerOpen(true)}
       />
 
       <div className="insights-body" id="insightsBody">
@@ -108,6 +110,13 @@ export function InsightsPage({
           )}
         </div>
       </div>
+
+      <InsightsPickerSheet
+        open={pickerOpen}
+        onOpenChange={setPickerOpen}
+        range={range}
+        onPick={pick}
+      />
     </main>
   );
 }

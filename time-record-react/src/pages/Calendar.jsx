@@ -1,9 +1,9 @@
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 
 import { CalendarGrid, triggerMonthAnimation } from '@/components/CalendarGrid.jsx';
 import { EventCard } from '@/components/EventCard.jsx';
 import { EmptyState } from '@/components/EmptyState.jsx';
-import { openMonthSelector } from '@/components/MonthSelectorSheet.js';
+import { MonthSelectorSheet } from '@/components/MonthSelectorSheet.jsx';
 import { MONTHS_LONG } from '@/lib/constants.js';
 import { todayISO } from '@/lib/date.js';
 import { formatDayLabel, getLang, t } from '@/lib/i18n.js';
@@ -21,6 +21,8 @@ export function CalendarPage({
   onAddEvent,
   onEditEvent,
 }) {
+  const [pickerOpen, setPickerOpen] = useState(false);
+
   const monthTitle = getLang() === 'zh'
     ? `${viewYear}年${viewMonth + 1}月`
     : `${MONTHS_LONG[viewMonth]} ${viewYear}`;
@@ -62,12 +64,12 @@ export function CalendarPage({
           </svg>
         </button>
         <button
-          className="month-title"
+          className={`month-title${pickerOpen ? ' is-open' : ''}`}
           id="monthTitleBtn"
           type="button"
           aria-haspopup="dialog"
           aria-label="Select month and year"
-          onClick={() => openMonthSelector({ viewYear, viewMonth, onPick: onSetMonth })}
+          onClick={() => setPickerOpen(true)}
         >
           <span id="monthTitleText">{monthTitle}</span>
           <svg className="chevron-down" viewBox="0 0 24 24" aria-hidden="true">
@@ -132,6 +134,14 @@ export function CalendarPage({
             : <EmptyState onAdd={() => onAddEvent()} />}
         </div>
       </section>
+
+      <MonthSelectorSheet
+        open={pickerOpen}
+        onOpenChange={setPickerOpen}
+        viewYear={viewYear}
+        viewMonth={viewMonth}
+        onPick={onSetMonth}
+      />
     </main>
   );
 }

@@ -50,7 +50,18 @@ async function boot({ url = 'https://example.test/time-record/', storage = null 
   };
   window.Element.prototype.setPointerCapture = () => {};
   window.Element.prototype.releasePointerCapture = () => {};
-  if (!window.PointerEvent) window.PointerEvent = window.MouseEvent;
+  window.Element.prototype.hasPointerCapture = () => false;
+  // jsdom has no PointerEvent. The sheet's drag-to-dismiss reads pointerId and
+  // pointerType, so a bare MouseEvent alias is not enough.
+  if (!window.PointerEvent) {
+    window.PointerEvent = class PointerEventStub extends window.MouseEvent {
+      constructor(type, opts = {}) {
+        super(type, opts);
+        this.pointerId = opts.pointerId ?? 1;
+        this.pointerType = opts.pointerType ?? 'touch';
+      }
+    };
+  }
   window.matchMedia = window.matchMedia || (() => ({
     matches: false, addEventListener() {}, removeEventListener() {},
     addListener() {}, removeListener() {},
@@ -77,6 +88,22 @@ const $ = (doc, sel) => doc.querySelector(sel);
 const $$ = (doc, sel) => [...doc.querySelectorAll(sel)];
 const clickEl = (window, node) => {
   node.dispatchEvent(new window.MouseEvent('click', { bubbles: true, cancelable: true }));
+};
+
+/** Simulate a vertical drag on a sheet's grab area (touch by default). */
+const dragEl = (window, node, { from = 0, to = 200, dt = 400 } = {}) => {
+  const base = window.performance.now();
+  const ev = (type, y, ts) => {
+    const e = new window.PointerEvent(type, {
+      bubbles: true, cancelable: true, clientY: y, pointerId: 7, pointerType: 'touch', button: 0,
+    });
+    Object.defineProperty(e, 'timeStamp', { value: ts });
+    return e;
+  };
+  node.dispatchEvent(ev('pointerdown', from, base));
+  node.dispatchEvent(ev('pointermove', (from + to) / 2, base + dt / 2));
+  node.dispatchEvent(ev('pointermove', to, base + dt));
+  node.dispatchEvent(ev('pointerup', to, base + dt));
 };
 
 /**
@@ -252,12 +279,20 @@ await tick(500);
 check('Period › steps forward',
   $(doc, '.period-label span')?.textContent === periodBefore);
 
-// Period picker sheet.
+// Period picker sheet — now a shadcn Sheet (Radix Dialog), portalled to <body>.
 clickEl(window, $(doc, '.period-label'));
 await tick(500);
-check('Period picker sheet opens', $$(doc, '#overlays .sheet').length === 1);
-clickEl(window, $(doc, '.sheet-close'));
-await tick(400);
+check('Period picker sheet opens', $$(doc, '[data-slot="sheet-content"]').length === 1);
+check('Sheet is a labelled dialog',
+  $(doc, '[data-slot="sheet-content"]')?.getAttribute('role') === 'dialog'
+  && !!$(doc, '[data-slot="sheet-content"]')?.getAttribute('aria-labelledby'));
+// Radix omits aria-modal on purpose (it trips an iOS VoiceOver bug) and hides
+// the rest of the page from assistive tech instead.
+check('Sheet hides the page behind it from screen readers',
+  $(doc, '#root')?.getAttribute('aria-hidden') === 'true');
+clickEl(window, $(doc, '[data-slot="sheet-close"]'));
+await tick(450);
+check('Period picker sheet closes', $$(doc, '[data-slot="sheet-content"]').length === 0);
 
 /* ══════════════ 4. MORE ══════════════ */
 clickEl(window, $(doc, '.tab-item[data-tab="more"]'));
@@ -465,11 +500,50 @@ check('Prev month returns', $(doc, '#monthTitleText').textContent === titleBefor
 
 clickEl(window, $(doc, '#monthTitleBtn'));
 await tick(600);
-check('Month/year selector sheet opens', $$(doc, '#overlays .sheet').length === 1);
+check('Month/year selector sheet opens', $$(doc, '[data-slot="sheet-content"]').length === 1);
 check('12 month cells + year stepper',
   $$(doc, '.month-cell').length === 12 && !!$(doc, '.year-value'));
-clickEl(window, $(doc, '.sheet-close'));
-await tick(450);
+
+// ── Drag-to-dismiss. Reimplemented on top of Radix in phase 2, so the whole
+// gesture is asserted here: it is touch-only behaviour that nothing else
+// covers, and it is the part most likely to regress silently.
+const sheetEl = () => $(doc, '[data-slot="sheet-content"]');
+const grabHandle = () => $(doc, '[data-slot="sheet-handle"]');
+
+dragEl(window, grabHandle(), { from: 0, to: 40, dt: 400 });
+await tick(400);
+check('Sheet: a short slow drag springs back instead of closing',
+  !!sheetEl() && !sheetEl().style.transform);
+
+dragEl(window, grabHandle(), { from: 300, to: 200, dt: 300 });
+await tick(400);
+check('Sheet: dragging upwards does not lift or close it', !!sheetEl());
+
+dragEl(window, grabHandle(), { from: 0, to: 60, dt: 80 });
+await tick(600);
+check('Sheet: a fast flick closes it even if short', !sheetEl());
+
+clickEl(window, $(doc, '#monthTitleBtn'));
+await tick(600);
+dragEl(window, $(doc, '[data-slot="sheet-header"]'), { from: 0, to: 200, dt: 400 });
+await tick(600);
+check('Sheet: a long drag from the header closes it', !sheetEl());
+
+clickEl(window, $(doc, '#monthTitleBtn'));
+await tick(600);
+doc.dispatchEvent(new window.KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+await tick(600);
+check('Sheet: Escape closes it', !sheetEl());
+
+// Picking a month applies it and dismisses the sheet.
+clickEl(window, $(doc, '#monthTitleBtn'));
+await tick(600);
+const titleBeforePick = $(doc, '#monthTitleText').textContent;
+clickEl(window, $$(doc, '.month-cell')[0]);
+await tick(700);
+check('Sheet: picking a month closes it and applies the choice',
+  !sheetEl() && $(doc, '#monthTitleText').textContent !== titleBeforePick,
+  `${titleBeforePick} → ${$(doc, '#monthTitleText').textContent}`);
 
 /* ══════════════ 7. I18N ══════════════ */
 clickEl(window, $(doc, '.tab-item[data-tab="more"]'));
