@@ -62,7 +62,9 @@ export function validTime(t) {
 
 export function validDate(d) {
   if (typeof d !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(d)) return false;
-  const { y, m, dd } = parseISO(d);
-  const dt = new Date(y, m, dd);
-  return dt.getFullYear() === y && dt.getMonth() === m && dt.getDate() === dd;
+  // parseISO returns { y, m, d } — destructuring `dd` here made every date
+  // invalid, so imported events silently fell back to today.
+  const { y, m, d: day } = parseISO(d);
+  const dt = new Date(y, m, day);
+  return dt.getFullYear() === y && dt.getMonth() === m && dt.getDate() === day;
 }

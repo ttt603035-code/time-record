@@ -376,19 +376,15 @@ await tick(900);
 const importedList = JSON.parse(window.localStorage.getItem('calendar_events_v1')).events;
 const imported = importedList.find((e) => e.title === 'CET-6 Reading via Shortcut');
 check('Shortcut URL: single object accepted', !!imported);
-// NOTE: `date` is intentionally excluded from this assertion. The legacy
-// `validDate()` destructures `{ y, m, dd }` from `parseISO()`, which actually
-// returns `{ y, m, d }` — so `dd` is always undefined and validDate() always
-// returns false, making every imported date fall back to today. This bug is
-// present in the original app.js and is reproduced faithfully here; fixing it
-// is a behaviour change and therefore out of scope for phase 1.
-check('Shortcut URL: every field preserved verbatim (parity with legacy)',
-  imported && imported.startTime === '09:00'
+check('Shortcut URL: every field preserved verbatim',
+  imported && imported.date === '2026-08-16' && imported.startTime === '09:00'
   && imported.endTime === '10:30' && imported.category === 'English'
   && imported.color === 'blue' && imported.note === 'from Apple Shortcuts');
-check('Shortcut URL: legacy validDate() bug reproduced exactly (date → today)',
-  imported && imported.date === new Date().toISOString().slice(0, 10),
-  `stored ${imported?.date}`);
+// Regression guard for the validDate() fix: parseISO returns { y, m, d }, so
+// destructuring `dd` used to make every date invalid and silently replace an
+// imported event's date with today.
+check('Shortcut URL: imported date is honoured, not replaced by today',
+  imported && imported.date === '2026-08-16', `stored ${imported?.date}`);
 check('Shortcut URL: id auto-generated', !!imported?.id.startsWith('evt_'));
 check('Shortcut URL: ?import= stripped from the address',
   !window.location.search.includes('import='), window.location.search || '(empty)');
@@ -407,9 +403,12 @@ window.close();
   storage: snap2,
 }));
 await tick(900);
-const arrCount = JSON.parse(window.localStorage.getItem('calendar_events_v1')).events
-  .filter((e) => e.title.startsWith('Array Import')).length;
-check('Shortcut URL: array payload', arrCount === 2, `${arrCount} imported`);
+const arrImported = JSON.parse(window.localStorage.getItem('calendar_events_v1')).events
+  .filter((e) => e.title.startsWith('Array Import'));
+check('Shortcut URL: array payload', arrImported.length === 2, `${arrImported.length} imported`);
+check('Shortcut URL: array payload keeps its dates',
+  arrImported.every((e) => e.date === '2026-08-17'),
+  arrImported.map((e) => e.date).join(','));
 
 // { events: [...] } envelope + safe defaults.
 const snap3 = { calendar_events_v1: window.localStorage.getItem('calendar_events_v1') };
@@ -424,10 +423,29 @@ await tick(900);
 const envList = JSON.parse(window.localStorage.getItem('calendar_events_v1')).events;
 const envEvent = envList.find((e) => e.title === 'Envelope Import');
 check('Shortcut URL: { events: [...] } envelope', !!envEvent);
+check('Shortcut URL: envelope keeps its date',
+  envEvent && envEvent.date === '2026-08-18', `stored ${envEvent?.date}`);
 check('Shortcut URL: safe defaults for omitted fields',
   envEvent && envEvent.startTime === '09:00' && envEvent.endTime === '10:00'
   && envEvent.color === 'blue' && envEvent.note === '',
   `${envEvent?.startTime}-${envEvent?.endTime} ${envEvent?.color}`);
+
+// A genuinely invalid date must still fall back to today (defensive behaviour
+// that the bug was masking).
+const snapBad = { calendar_events_v1: window.localStorage.getItem('calendar_events_v1') };
+window.close();
+({ window, doc } = await boot({
+  url: 'https://example.test/time-record/?import=' + encodeURIComponent(JSON.stringify({
+    date: '2026-02-31', title: 'Invalid Date Import',
+  })),
+  storage: snapBad,
+}));
+await tick(900);
+const badEvent = JSON.parse(window.localStorage.getItem('calendar_events_v1')).events
+  .find((e) => e.title === 'Invalid Date Import');
+check('Invalid date (2026-02-31) still falls back to today',
+  badEvent && badEvent.date === new Date().toISOString().slice(0, 10),
+  `stored ${badEvent?.date}`);
 
 // Same ID twice must update, not duplicate.
 const snap4 = { calendar_events_v1: window.localStorage.getItem('calendar_events_v1') };

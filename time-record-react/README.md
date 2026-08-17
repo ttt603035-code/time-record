@@ -170,7 +170,7 @@ phase 2.
 
 `verify.mjs` is a throwaway harness (not part of the app). It builds the
 project, loads the real production bundle in jsdom, and drives the actual React
-tree: **129 checks**, covering the storage contract, event schema, CRUD, the
+tree: **132 checks**, covering the storage contract, event schema, CRUD, the
 full Insights drill-down, i18n persistence, reload persistence, corrupt-data
 recovery, the PWA/Safari meta, and four Shortcut import payload shapes.
 
@@ -178,16 +178,24 @@ recovery, the PWA/Safari meta, and four Shortcut import payload shapes.
 npm run build && node verify.mjs
 ```
 
-### One known legacy bug, reproduced on purpose
+### Fixed: imported dates were silently replaced by today
 
-`validDate()` destructures `{ y, m, dd }` from `parseISO()`, which returns
-`{ y, m, d }`. `dd` is therefore always `undefined`, `validDate()` always
-returns `false`, and **an imported event's `date` always falls back to today.**
+`validDate()` destructured `{ y, m, dd }` from `parseISO()`, which returns
+`{ y, m, d }`. `dd` was therefore always `undefined`, `validDate()` always
+returned `false`, and **every imported event's `date` fell back to today** —
+so a Shortcut sending yesterday's session filed it under today, and importing
+a backup collapsed the whole history onto a single day.
 
-This is present in the original `app.js` (verified by running it in the same
-harness) and is faithfully reproduced here, because phase 1 must not change
-behaviour. It is a one-line fix (`dd` → `d`) whenever you want it — say the
-word and I will apply it to both the legacy app and the React version.
+Fixed in **both** the React version (`src/lib/date.js`) and the legacy
+`app.js`, so the two stay in sync:
+
+```js
+const { y, m, d: day } = parseISO(d);
+```
+
+Genuinely invalid dates (e.g. `2026-02-31`) still fall back to today, which is
+the defensive behaviour the bug was masking. Covered by regression checks for
+single-object, array and envelope payloads.
 
 ---
 
