@@ -73,6 +73,21 @@ const $$ = (doc, sel) => [...doc.querySelectorAll(sel)];
 const clickEl = (window, node) => {
   node.dispatchEvent(new window.MouseEvent('click', { bubbles: true, cancelable: true }));
 };
+
+/**
+ * Set a controlled React input's value.
+ *
+ * React installs its own value setter on the element, so assigning `.value`
+ * directly does not notify it. Call the native prototype setter first, then
+ * dispatch input — this is the standard way to drive a controlled input.
+ */
+const setReactValue = (window, node, value) => {
+  const proto = node.tagName === 'TEXTAREA'
+    ? window.HTMLTextAreaElement.prototype
+    : window.HTMLInputElement.prototype;
+  Object.getOwnPropertyDescriptor(proto, 'value').set.call(node, value);
+  node.dispatchEvent(new window.Event('input', { bubbles: true }));
+};
 const tick = (ms = 350) => new Promise((r) => setTimeout(r, ms));
 
 /* ══════════════ 1. FIRST LAUNCH ══════════════ */
@@ -256,27 +271,35 @@ const countBefore = JSON.parse(window.localStorage.getItem('calendar_events_v1')
 clickEl(window, $(doc, '#btnAddDay'));
 await tick(600);
 check('Event form modal opens', $$(doc, '#overlays .study-modal').length === 1);
+// Phase 2: the form body is React + shadcn. Fields are identified by their
+// shadcn data-slot / label semantics rather than the legacy class names.
 check('Form has Title/Date/Start/End/Category/Color/Note fields',
-  $$(doc, '.study-modal .form-field').length >= 6,
-  `${$$(doc, '.study-modal .form-field').length} fields`);
-check('Category quick-pick chips', $$(doc, '.tpl-chip').length === 6);
-check('Five color swatches', $$(doc, '.swatch').length === 5);
+  $$(doc, '.study-modal [data-slot="label"]').length >= 6,
+  `${$$(doc, '.study-modal [data-slot="label"]').length} labelled fields`);
+check('Form uses shadcn inputs',
+  $$(doc, '.study-modal [data-slot="input"]').length === 2
+  && $$(doc, '.study-modal [data-slot="textarea"]').length === 1,
+  `${$$(doc, '.study-modal [data-slot="input"]').length} inputs, ${$$(doc, '.study-modal [data-slot="textarea"]').length} textarea`);
+check('Category quick-pick chips', $$(doc, '.study-modal [aria-pressed]').length >= 6);
+check('Five color swatches',
+  $$(doc, '.study-modal button[aria-label^="Color "]').length === 5);
 check('Datalist suggestions present', !!$(doc, '#catSuggestions'));
 
 // Open the date wheel.
-clickEl(window, $(doc, '.picker-trigger'));
+clickEl(window, $(doc, '[data-slot="picker-trigger"]'));
 await tick(450);
 check('iOS date wheel opens with 3 columns', $$(doc, '.wheel-col').length === 3);
-clickEl(window, $(doc, '.picker-trigger'));
+clickEl(window, $(doc, '[data-slot="picker-trigger"]'));
 await tick(350);
 
 // Fill and save.
-const titleInput = $(doc, '.study-modal .text-input');
-titleInput.value = 'Migration Test Event';
-titleInput.dispatchEvent(new window.Event('input', { bubbles: true }));
-clickEl(window, $(doc, '.tpl-chip'));
+const titleInput = $(doc, '.study-modal [data-slot="input"]');
+setReactValue(window, titleInput, 'Migration Test Event');
+await tick(200);
+clickEl(window, $(doc, '.study-modal button[aria-pressed]'));
 await tick(300);
-const saveBtn = $$(doc, '.study-modal-foot .btn-primary')[0];
+const saveBtn = $$(doc, '.study-modal-foot [data-slot="button"]')
+  .find((b) => b.getAttribute('data-variant') === 'default');
 clickEl(window, saveBtn);
 await tick(800);
 
@@ -295,11 +318,13 @@ const card = $$(doc, '.event-card').find((c) => c.textContent.includes('Migratio
 clickEl(window, card);
 await tick(600);
 check('Edit form prefilled with the title',
-  $(doc, '.study-modal .text-input')?.value === 'Migration Test Event');
-check('Delete action available in edit mode', !!$(doc, '.btn-danger-text'));
+  $(doc, '.study-modal [data-slot="input"]')?.value === 'Migration Test Event');
+const deleteBtn = $$(doc, '.study-modal button')
+  .find((b) => b.textContent.trim() === 'Delete Event');
+check('Delete action available in edit mode', !!deleteBtn);
 
 // Delete it.
-clickEl(window, $(doc, '.btn-danger-text'));
+clickEl(window, deleteBtn);
 await tick(450);
 check('Delete confirmation dialog opens', $$(doc, '#overlays .dialog').length === 1);
 clickEl(window, $(doc, '.dialog-actions button.is-danger'));

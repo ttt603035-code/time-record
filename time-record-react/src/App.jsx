@@ -1,7 +1,7 @@
 import { useCallback, useRef, useState } from 'react';
 
 import { BottomTabBar } from '@/components/BottomTabBar.jsx';
-import { openEventForm } from '@/components/EventFormModal.js';
+import { openEventForm } from '@/components/EventFormModal.jsx';
 import { useAnalyticsRoute } from '@/hooks/useAnalyticsRoute.js';
 import { useAppData } from '@/hooks/useAppData.js';
 import { useInsightsRange } from '@/hooks/useInsightsRange.js';

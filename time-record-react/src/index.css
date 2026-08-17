@@ -1,13 +1,15 @@
 /* ============================================================
    shadcn/ui base layer
    ------------------------------------------------------------
-   Phase 1 note: Tailwind's preflight is disabled (see
-   tailwind.config.js). The app's visual language still comes
-   entirely from `styles.css` — the untouched stable stylesheet.
+   Phase 2: shadcn components are adopted with their native look,
+   tuned to an Apple/iOS palette. Tailwind's preflight stays off —
+   `styles.css` (the stable stylesheet) still owns the reset and
+   every screen that has not been migrated yet.
 
-   These tokens are namespaced with `--sh-` so they can never
-   collide with the legacy design tokens (`--bg`, `--text`,
-   `--accent`, …) defined in styles.css.
+   Tokens are namespaced `--sh-*` so they can never collide with
+   the legacy design tokens (`--bg`, `--text`, `--accent`, …).
+   The values mirror the legacy palette, so a migrated control
+   sits naturally next to one that has not moved yet.
    ============================================================ */
 
 @tailwind base;
@@ -17,24 +19,56 @@
 @layer base {
   :root {
     --sh-background: 0 0% 100%;
-    --sh-foreground: 240 4% 12%;
+    --sh-foreground: 240 4% 12%;          /* #1D1D1F */
     --sh-card: 0 0% 100%;
     --sh-card-foreground: 240 4% 12%;
     --sh-popover: 0 0% 100%;
     --sh-popover-foreground: 240 4% 12%;
-    --sh-primary: 240 4% 12%;
+    --sh-primary: 240 4% 12%;             /* black accent, as today */
     --sh-primary-foreground: 0 0% 100%;
-    --sh-secondary: 240 5% 96%;
+    --sh-secondary: 240 9% 98%;           /* #FAFAFC surface-2 */
     --sh-secondary-foreground: 240 4% 12%;
-    --sh-muted: 240 5% 96%;
-    --sh-muted-foreground: 240 4% 46%;
-    --sh-accent: 240 5% 96%;
+    --sh-muted: 240 9% 98%;
+    --sh-muted-foreground: 240 2% 53%;    /* #86868B */
+    --sh-accent: 240 9% 98%;
     --sh-accent-foreground: 240 4% 12%;
-    --sh-destructive: 4 100% 59%;
+    --sh-destructive: 4 100% 59%;         /* #FF3B30 iOS red */
     --sh-destructive-foreground: 0 0% 100%;
     --sh-border: 240 6% 90%;
     --sh-input: 240 6% 90%;
     --sh-ring: 240 4% 12%;
-    --radius: 0.75rem;
+    --radius: 0.75rem;                    /* 12px — matches --radius-md */
+  }
+}
+
+@layer base {
+  /*
+   * The legacy stylesheet sets a global focus ring:
+   *
+   *   button:focus-visible, input:focus-visible, textarea:focus-visible
+   *     { outline: 2px solid var(--accent); outline-offset: 2px; }
+   *
+   * shadcn draws its own focus state with `focus-visible:ring-[3px]`, so on a
+   * migrated control the two stack into a double ring. Suppress the legacy
+   * outline only on elements that opt in via `data-slot` (every shadcn
+   * component sets it). Screens that have not been migrated keep the original
+   * focus ring untouched.
+   */
+  [data-slot]:focus-visible {
+    outline: none;
+  }
+
+  /* iOS Safari zooms the page when a focused field is under 16px. shadcn's
+     Input/Textarea drop to `md:text-sm` at ≥768px, which is safe on iPad;
+     below that keep the 16px base so iPhone never zooms on focus. */
+  input[data-slot='input'],
+  textarea[data-slot='textarea'] {
+    font-size: 16px;
+  }
+  @media (min-width: 768px) {
+    input[data-slot='input'],
+    textarea[data-slot='textarea'] {
+      font-size: 0.875rem;
+    }
   }
 }

@@ -10,6 +10,17 @@ export default {
   corePlugins: { preflight: false },
   theme: {
     extend: {
+      // The shadcn new-york-v4 components are authored for Tailwind v4 and use
+      // a few utilities that do not exist in v3. Without these they compile to
+      // nothing and the controls render subtly wrong (no border shadow, wrong
+      // sizes), so define the v4 equivalents explicitly.
+      boxShadow: {
+        xs: '0 1px 2px 0 rgb(0 0 0 / 0.05)',
+      },
+      spacing: {
+        7.5: '1.875rem', // 30px — colour swatch, matches the legacy .swatch
+        8.5: '2.125rem', // 34px — chip min-height, matches the legacy .tpl-chip
+      },
       borderRadius: {
         lg: 'var(--radius)',
         md: 'calc(var(--radius) - 2px)',
@@ -66,5 +77,16 @@ export default {
       },
     },
   },
-  plugins: [require('tailwindcss-animate')],
+  plugins: [
+    require('tailwindcss-animate'),
+    // `field-sizing` ships in Tailwind v4; the shadcn v4 Textarea relies on it
+    // to grow with its content. Provide it here so the component behaves as
+    // authored. Browsers without support simply ignore the declaration.
+    ({ addUtilities }) => {
+      addUtilities({
+        '.field-sizing-content': { 'field-sizing': 'content' },
+        '.field-sizing-fixed': { 'field-sizing': 'fixed' },
+      });
+    },
+  ],
 };
