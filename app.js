@@ -2614,23 +2614,53 @@ function donutChart(segments, opts) {
     })[char]);
   }
 
+  /*
+   * Arc allocation.
+   *
+   * A round line cap extends half a stroke width past each end, so a segment
+   * inks (dash length + stroke width). To leave GAP between neighbours the
+   * dash is trimmed by (stroke width + GAP) — meaning a segment needs at
+   * least that much arc to render at all.
+   *
+   * Previously a tiny slice kept the full stroke width and clamped its dash to
+   * a minimum, so its two caps painted a ~24px blob over a ~9px arc and bled
+   * into the neighbour (the "过度圆滑粘连" failure mode in the spec sheet).
+   *
+   * Instead, guarantee every visible slice a minimum arc and take that space
+   * proportionally from the slices that can spare it. The ring keeps a single
+   * uniform thickness, neighbours stay cleanly separated by GAP, and the arcs
+   * remain as close to the data as the geometry allows.
+   */
+  const maxStroke = selectedKey ? sw + 6 : sw;
+  const minArc = maxStroke + GAP + 0.5;
+  const arcs = drawable.map((seg) => (seg.minutes / total) * C);
+  const needy = arcs.filter((a) => a < minArc);
+
+  if (drawable.length > 1 && needy.length && needy.length < drawable.length) {
+    const deficit = needy.reduce((s, a) => s + (minArc - a), 0);
+    const donors = arcs.reduce((s, a) => s + (a > minArc ? a - minArc : 0), 0);
+    if (donors > deficit) {
+      const ratio = deficit / donors;
+      for (let i = 0; i < arcs.length; i++) {
+        if (arcs[i] < minArc) arcs[i] = minArc;
+        else arcs[i] -= (arcs[i] - minArc) * ratio;
+      }
+    }
+  }
+
   let circles = '';
-  let offset = 0;
-  drawable.forEach((seg) => {
-    const frac = seg.minutes / total;
-    const arc = frac * C;
+  let cursor = 0;
+  drawable.forEach((seg, i) => {
+    const arc = arcs[i];
     const isSel = selectedKey === seg.key;
     const w = isSel ? sw + 6 : sw;
     const opacity = selectedKey && !isSel ? 0.22 : 1;
     let dash = '';
 
     if (drawable.length > 1) {
-      // A round line cap extends by half the stroke width at both ends. Trim a
-      // full stroke width plus GAP from each segment's centreline so the final
-      // cap-to-cap gap remains 3px instead of overlapping into a solid ring.
       const trim = w + GAP;
-      const len = Math.max(0.1, arc - trim);
-      const start = offset * C + trim / 2;
+      const len = Math.max(0.01, arc - trim);
+      const start = cursor + trim / 2;
       dash = ' stroke-dasharray="' + len.toFixed(2) + ' ' + (C - len).toFixed(2)
         + '" stroke-dashoffset="' + (-start).toFixed(2) + '"';
     }
@@ -2640,18 +2670,19 @@ function donutChart(segments, opts) {
       + '" stroke-linecap="round"' + dash
       + ' transform="rotate(-90 ' + cx + ' ' + cy + ')" opacity="' + opacity
       + '" style="transition: opacity 0.18s ease, stroke-width 0.18s ease"/>';
-    offset += frac;
+    cursor += arc;
   });
 
+  // Hit areas follow the same allocation as the drawn arcs, so a tap always
+  // lands on the segment actually under the finger.
   let hit = '';
-  offset = 0;
-  drawable.forEach((seg) => {
-    const frac = seg.minutes / total;
-    const arc = frac * C;
+  cursor = 0;
+  drawable.forEach((seg, i) => {
+    const arc = arcs[i];
     let dash = '';
     if (drawable.length > 1) {
       const len = Math.max(0.1, arc - GAP);
-      const start = offset * C + GAP / 2;
+      const start = cursor + GAP / 2;
       dash = ' stroke-dasharray="' + len.toFixed(2) + ' ' + (C - len).toFixed(2)
         + '" stroke-dashoffset="' + (-start).toFixed(2) + '"';
     }
@@ -2659,7 +2690,7 @@ function donutChart(segments, opts) {
       + '" r="' + r + '" fill="none" stroke="transparent" stroke-width="' + (sw + 26)
       + '" stroke-linecap="butt"' + dash + ' transform="rotate(-90 ' + cx + ' ' + cy
       + ')" tabindex="0" role="button" aria-label="' + attr(seg.name) + '"/>';
-    offset += frac;
+    cursor += arc;
   });
 
   svgBox.innerHTML = '<svg width="' + size + '" height="' + size + '" viewBox="0 0 '

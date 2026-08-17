@@ -197,6 +197,33 @@ Genuinely invalid dates (e.g. `2026-02-31`) still fall back to today, which is
 the defensive behaviour the bug was masking. Covered by regression checks for
 single-object, array and envelope payloads.
 
+### Fixed: tiny donut segments bled into their neighbours
+
+The donut spec sheet asks for round caps, a 2–4px gap between slices, uniform
+ring thickness and clean separation — explicitly rejecting **过度圆滑粘连**
+(over-rounded segments merging together).
+
+A round cap extends half a stroke width past each end, so a slice inks
+`dash length + stroke width` and needs at least `stroke width + GAP` (27.5px of
+a 455.7px ring, i.e. **6%**) to render correctly. Anything smaller kept the full
+24.5px stroke but clamped its dash to 0.1px, so its two caps painted a ~24.6px
+blob across a ~9px arc — **overlapping the neighbour by 15.4px.**
+
+Every visible slice is now guaranteed a minimum arc, taken proportionally from
+the slices that can spare it. Thickness stays uniform, gaps stay at 3px, and the
+arcs stay as close to the data as the geometry allows. Hit areas use the same
+allocation, so taps still land on the right segment.
+
+Fixed in both `src/components/charts/DonutChart.jsx` and the legacy `app.js`.
+
+```bash
+npm run build && node donut-spec.mjs   # 6/6 spec requirements met
+```
+
+Verified across single-segment, one-dominant-plus-sliver, five-slivers,
+all-equal and ten-segment datasets — gaps stay within 2.99–3.01px and the ring
+keeps a single 24.5px thickness in every case.
+
 ---
 
 ## Phase 2 (not started)
