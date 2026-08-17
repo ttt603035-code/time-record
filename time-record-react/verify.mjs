@@ -241,21 +241,39 @@ await tick(400);
 clickEl(window, $(doc, '.tab-item[data-tab="more"]'));
 await tick(500);
 check('More screen mounts', !!$(doc, '#screen-more'));
-check('Data / Language / About cards', $$(doc, '.settings-card').length === 3);
-check('Data stat tiles', $$(doc, '.stat-row .stat-tile').length === 3);
-check('Export / Import / Clear buttons', $$(doc, '.settings-actions .btn-seg').length === 3);
-check('Storage keys table lists the three keys',
-  $$(doc, '.key-row').length >= 3, `${$$(doc, '.key-row').length} rows`);
-const keyNames = $$(doc, '.key-row .key-name').map((n) => n.textContent);
+// Phase 2: the More screen is React + shadcn (Card / Separator / Collapsible),
+// so structure is identified by data-slot rather than legacy class names.
+check('Data / Language / About cards', $$(doc, '[data-slot="card"]').length === 3,
+  `${$$(doc, '[data-slot="card"]').length} cards`);
+check('Data stat tiles', $$(doc, '[data-slot="card-content"] .grid-cols-3 > div').length === 3);
+const dataActions = $$(doc, '[data-slot="card-content"] [data-slot="button"]');
+check('Export / Import / Clear buttons', dataActions.length >= 3,
+  dataActions.slice(0, 3).map((b) => b.textContent.trim()).join(', '));
+
+// The storage-key table now lives in a Collapsible, so it is only in the DOM
+// once expanded — open it before asserting.
+const keysTrigger = $(doc, '[data-slot="collapsible-trigger"]');
+check('Storage keys collapsible present', !!keysTrigger);
+clickEl(window, keysTrigger);
+await tick(400);
+const keyRows = $$(doc, '[data-slot="collapsible-content"] .grid-cols-\\[minmax\\(0\\2c 1fr\\)_60px_64px\\]');
+const keyNames = $$(doc, '[data-slot="collapsible-content"] span.truncate').map((n) => n.textContent);
+check('Storage keys table lists the three keys', keyNames.length >= 3,
+  `${keyNames.length} rows`);
 check('Storage key names unchanged',
   keyNames.includes('calendar_events_v1')
   && keyNames.includes('calendar_categories_v1')
   && keyNames.includes('calendar_settings_v1'), keyNames.join(','));
-check('Four About rows', $$(doc, '.settings-row').length === 4);
+clickEl(window, keysTrigger);
+await tick(300);
+
+check('Four About rows', $$(doc, '[data-slot="card-content"] > .flex-col > button').length === 4,
+  `${$$(doc, '[data-slot="card-content"] > .flex-col > button').length} rows`);
 
 // Templates modal. Phase 2: React + shadcn, so rows are identified by their
 // delete button's aria-label rather than the legacy .tpl-row class.
-clickEl(window, $(doc, '.settings-row'));
+const aboutRows = () => $$(doc, '[data-slot="card-content"] > .flex-col > button');
+clickEl(window, aboutRows()[0]);
 await tick(600);
 const tplRows = () => $$(doc, '.study-modal button[aria-label^="Delete "]');
 const storedCats = () => JSON.parse(window.localStorage.getItem('calendar_categories_v1'));
@@ -434,7 +452,10 @@ await tick(450);
 /* ══════════════ 7. I18N ══════════════ */
 clickEl(window, $(doc, '.tab-item[data-tab="more"]'));
 await tick(500);
-const zhBtn = $$(doc, '.lang-btns .btn-seg').find((b) => b.textContent.includes('中文'));
+// Language buttons are shadcn Buttons in the Language card now.
+const langBtn = (label) => $$(doc, '[data-slot="button"]')
+  .find((b) => b.textContent.trim() === label);
+const zhBtn = langBtn('中文');
 clickEl(window, zhBtn);
 await tick(700);
 check('UI switches to 中文', $(doc, '#screen-more .page-title')?.textContent === '更多');
@@ -443,7 +464,7 @@ check('Tab labels translated',
 const settings = JSON.parse(window.localStorage.getItem('calendar_settings_v1'));
 check('Language persisted in calendar_settings_v1', settings.lang === 'zh', JSON.stringify(settings));
 check('<html lang> updated', doc.documentElement.lang === 'zh-CN');
-const enBtn = $$(doc, '.lang-btns .btn-seg').find((b) => b.textContent.includes('English'));
+const enBtn = langBtn('English');
 clickEl(window, enBtn);
 await tick(700);
 check('UI switches back to English', $(doc, '#screen-more .page-title')?.textContent === 'More');
