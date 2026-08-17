@@ -185,6 +185,16 @@ clickEl(window, firstRank);
 await tick(500);
 check('Selecting a segment cross-filters', $$(doc, '.rank-row.is-selected').length === 1);
 check('"All Categories" reset chip appears', !!$(doc, '.chip-reset'));
+// It must sit in the donut card's header, above the chart, so that clearing a
+// selection does not require scrolling past the donut to the tasks card.
+const resetChip = $(doc, '.chip-reset');
+const donutCard = $(doc, '.donut-svg')?.closest('.chart-card');
+check('Reset chip lives in the donut card header',
+  !!donutCard && donutCard.contains(resetChip)
+    && !!resetChip.closest('.chart-head'));
+check('Reset chip precedes the donut in the DOM',
+  !!(resetChip.compareDocumentPosition($(doc, '.donut-svg'))
+    & window.Node.DOCUMENT_POSITION_FOLLOWING));
 check('"View Details" action appears', !!$(doc, '.chart-head-action'));
 
 // Drill into the category.
@@ -608,6 +618,33 @@ await tick(700);
 check('Analytics derives live from the imported Time Record',
   $$(doc, '.rank-row').length > 0, `${$$(doc, '.rank-row').length} categories`);
 
+// Multi-month backfill: a single import may span many months, and re-running
+// it must stay idempotent (this is the historical-import flow).
+window.close();
+const backfill = [];
+for (let m = 1; m <= 6; m += 1) {
+  backfill.push({
+    id: `cal_bf_${m}`, date: `2026-${String(m).padStart(2, '0')}-15`,
+    startTime: '09:00', endTime: '10:30', title: `Backfilled ${m}`, category: 'Work',
+  });
+}
+const backfillUrl = 'https://example.test/time-record/?import=' + encodeURIComponent(JSON.stringify(backfill));
+({ window, doc } = await boot({ url: backfillUrl, storage: {} }));
+await tick(1000);
+const bfList = JSON.parse(window.localStorage.getItem('calendar_events_v1')).events;
+const bfMine = bfList.filter((e) => e.id.startsWith('cal_bf_'));
+check('Shortcut URL: backfill imports events across several past months',
+  bfMine.length === 6 && new Set(bfMine.map((e) => e.date.slice(0, 7))).size === 6,
+  `${bfMine.length} events over ${new Set(bfMine.map((e) => e.date.slice(0, 7))).size} months`);
+const snapBf = { calendar_events_v1: window.localStorage.getItem('calendar_events_v1') };
+window.close();
+({ window, doc } = await boot({ url: backfillUrl, storage: snapBf }));
+await tick(1000);
+const bfAgain = JSON.parse(window.localStorage.getItem('calendar_events_v1')).events
+  .filter((e) => e.id.startsWith('cal_bf_'));
+check('Shortcut URL: re-running a backfill does not duplicate',
+  bfAgain.length === 6, `${bfAgain.length} events`);
+
 /* ══════════════ 10. CORRUPT DATA SAFETY ══════════════ */
 window.close();
 ({ window, doc } = await boot({
@@ -651,12 +688,22 @@ check('CSS: legacy design tokens intact',
   css.includes('--c-blue') && css.includes('--tabbar-h')
   && css.toLowerCase().includes('#6fa8dc'));
 
-/* ══════════════ 12. STYLESHEET UNCHANGED ══════════════ */
+/* ══════════════ 12. STYLESHEET IS A SUPERSET OF THE LEGACY ONE ══════════════ */
+// Phase 1 pinned this byte-for-byte. Phase 2 deliberately restyles the UI, so
+// the rule now is weaker but still meaningful: every legacy rule must survive
+// unless it was intentionally replaced. Additions are expected; silent
+// deletions of legacy selectors are not.
 const legacyCss = readFileSync('../styles.css', 'utf8');
 const migratedCss = readFileSync('src/styles.css', 'utf8');
-check('styles.css copied byte-for-byte from the legacy app',
-  legacyCss === migratedCss,
-  `${legacyCss.length} vs ${migratedCss.length} bytes`);
+const legacySelectors = [...legacyCss.matchAll(/^\.([\w-]+)/gm)].map((m) => m[1]);
+const missingSelectors = [...new Set(legacySelectors)]
+  .filter((name) => !migratedCss.includes(`.${name}`));
+check('No legacy CSS class silently dropped',
+  missingSelectors.length === 0,
+  missingSelectors.length ? `missing: ${missingSelectors.join(', ')}` : `${new Set(legacySelectors).size} classes kept`);
+check('styles.css only grows (phase-2 additions are appended, not rewrites)',
+  migratedCss.length >= legacyCss.length,
+  `${legacyCss.length} → ${migratedCss.length} bytes`);
 
 /* ══════════════ 13. LEGACY FILES UNTOUCHED ══════════════ */
 check('legacy index.html still present', !!readFileSync('../index.html', 'utf8'));

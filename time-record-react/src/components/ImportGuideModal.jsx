@@ -85,11 +85,49 @@ function StepText({ children }) {
   return <p className="text-[13.5px] leading-relaxed text-muted-foreground">{children}</p>;
 }
 
+/** Date-range filter for the backfill variant of step 1. */
+const RANGE_HINT = `Start Date  is after   2026-01-01
+Start Date  is before  2026-02-01`;
+
+function ModeTab({ active, onClick, children }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      aria-pressed={active}
+      className={cn(
+        'flex-1 rounded-md px-3 py-1.5 text-[13px] font-semibold transition-colors',
+        active ? 'bg-background text-foreground shadow-xs' : 'text-muted-foreground',
+      )}
+    >
+      {children}
+    </button>
+  );
+}
+
 function ImportGuide() {
+  // Two flows share one Shortcut: the everyday "today" run and the one-off
+  // historical backfill, which differs only in step 1's filter.
+  const [mode, setMode] = useState('daily');
+  const backfill = mode === 'backfill';
+
   return (
     <div className="space-y-5">
+      <div
+        className="flex gap-1 rounded-lg bg-secondary p-1"
+        role="group"
+        aria-label={t('importGuide')}
+      >
+        <ModeTab active={!backfill} onClick={() => setMode('daily')}>
+          {t('guideModeDaily')}
+        </ModeTab>
+        <ModeTab active={backfill} onClick={() => setMode('backfill')}>
+          {t('guideModeBackfill')}
+        </ModeTab>
+      </div>
+
       <p className="text-[13.5px] leading-relaxed text-muted-foreground">
-        {t('importGuideDesc')}
+        {backfill ? t('guideBackfillDesc') : t('importGuideDesc')}
       </p>
 
       <div>
@@ -97,7 +135,10 @@ function ImportGuide() {
           {t('guideStepsTitle')}
         </h3>
         <ol className="space-y-4">
-          <Step n="1"><StepText>{t('guideStep1')}</StepText></Step>
+          <Step n="1">
+            <StepText>{backfill ? t('guideBackfillStep1') : t('guideStep1')}</StepText>
+            {backfill ? <CopyBlock text={RANGE_HINT} /> : null}
+          </Step>
           <Step n="2"><StepText>{t('guideStep2')}</StepText></Step>
           <Step n="3">
             <StepText>{t('guideStep3')}</StepText>
@@ -135,6 +176,26 @@ function ImportGuide() {
           </Step>
         </ol>
       </div>
+
+      {backfill ? (
+        <div data-slot="backfill-notes" className="space-y-3">
+          <div className="rounded-lg border border-input bg-secondary/60 p-3.5">
+            <p className="text-[12.5px] leading-relaxed text-muted-foreground">
+              {t('guideBackfillStep3')}
+            </p>
+          </div>
+          <div className="rounded-lg border border-input bg-secondary/60 p-3.5">
+            <p className="text-[12.5px] leading-relaxed text-muted-foreground">
+              {t('guideBackfillWhy')}
+            </p>
+          </div>
+          <div className="rounded-lg bg-secondary p-3.5">
+            <p className="text-[12.5px] leading-relaxed text-muted-foreground">
+              {t('guideBackfillAlt')}
+            </p>
+          </div>
+        </div>
+      ) : null}
 
       <div className="rounded-lg bg-secondary p-3.5">
         <h3 className="mb-2 text-[13px] font-semibold">{t('guideTipsTitle')}</h3>

@@ -69,7 +69,20 @@ export function Overview({
 
       {/* Donut — interactive time distribution with ranked legend */}
       <ChartCard>
-        <ChartTitle>{t('timeDistribution')}</ChartTitle>
+        <div className="chart-head">
+          <span className="chart-head-title">{t('timeDistribution')}</span>
+          {/* Clearing the selection has to be reachable without scrolling past
+              the donut — that is where the selection is made. */}
+          {sel ? (
+            <button
+              className="chip chip-reset chart-head-reset"
+              type="button"
+              onClick={() => setSelected(null)}
+            >
+              {t('allCategories')} ×
+            </button>
+          ) : null}
+        </div>
         {!segs.length ? <ChartEmpty /> : (
           <>
             <DonutChart
@@ -117,13 +130,6 @@ export function Overview({
                 onClick={() => onGo('category', { categoryKey: sel.key })}
               >
                 {t('viewDetails')} ›
-              </button>
-              <button
-                className="chip chip-reset"
-                type="button"
-                onClick={() => setSelected(null)}
-              >
-                {t('allCategories')} ×
               </button>
             </>
           ) : (
