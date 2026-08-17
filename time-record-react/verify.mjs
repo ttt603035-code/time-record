@@ -144,8 +144,12 @@ await tick(600);
 check('Month range activates', $(doc, '.seg-btn.is-active')?.textContent === 'Month');
 check('Donut segments drawn', $$(doc, '.donut-svg circle[data-key]').length > 0,
   `${$$(doc, '.donut-svg circle[data-key]').length} segments`);
-check('Donut uses round caps (spec)',
-  $(doc, '.donut-svg circle[stroke-linecap="round"]') !== null);
+// Segments are annular-sector paths with independently controlled corner radii
+// (spec: 0.25–0.4x thickness), not stroke-linecap="round" which is locked to
+// 0.5x. donut-spec.mjs measures the rendered geometry in detail.
+check('Donut segments are rounded-corner sector paths',
+  $$(doc, '.donut-svg path').length > 0,
+  `${$$(doc, '.donut-svg path').length} paths`);
 check('Donut center total shown', !!$(doc, '.dc-top')?.textContent);
 check('Ranked legend rows', $$(doc, '.rank-row').length > 0,
   `${$$(doc, '.rank-row').length} categories`);

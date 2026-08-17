@@ -197,32 +197,45 @@ Genuinely invalid dates (e.g. `2026-02-31`) still fall back to today, which is
 the defensive behaviour the bug was masking. Covered by regression checks for
 single-object, array and envelope payloads.
 
-### Fixed: tiny donut segments bled into their neighbours
+### Fixed: donut segments now follow the spec sheet
 
-The donut spec sheet asks for round caps, a 2–4px gap between slices, uniform
-ring thickness and clean separation — explicitly rejecting **过度圆滑粘连**
-(over-rounded segments merging together).
+The Donut Chart spec sheet asks for six things: round corner joins, a corner
+radius of **0.25–0.4x the ring thickness**, 2–4px gaps, uniform thickness,
+clean separation, and an iOS-native feel. It explicitly rejects 尖角连接
+(sharp joins), **过度圆滑粘连** (over-rounded segments merging) and 间距过大.
 
-A round cap extends half a stroke width past each end, so a slice inks
-`dash length + stroke width` and needs at least `stroke width + GAP` (27.5px of
-a 455.7px ring, i.e. **6%**) to render correctly. Anything smaller kept the full
-24.5px stroke but clamped its dash to 0.1px, so its two caps painted a ~24.6px
-blob across a ~9px arc — **overlapping the neighbour by 15.4px.**
+Two problems, both fixed:
 
-Every visible slice is now guaranteed a minimum arc, taken proportionally from
-the slices that can spare it. Thickness stays uniform, gaps stay at 3px, and the
-arcs stay as close to the data as the geometry allows. Hit areas use the same
-allocation, so taps still land on the right segment.
+**1. Small slices merged into their neighbours.** A round line cap extends half
+a stroke width past each end, so a slice inks `dash + stroke width` and needs at
+least `stroke width + gap` — 27.5px of a 455.7px ring, i.e. **6%** — to render.
+Anything smaller kept the full 24.5px stroke but clamped its dash to 0.1px, so
+two caps painted a ~24.6px blob across a ~9px arc, **overlapping the neighbour
+by 15.4px** — exactly the 过度圆滑粘连 failure mode.
+
+**2. The corner radius was out of range.** `stroke-linecap="round"` always
+produces a half-thickness semicircular dome (**0.5x**), overshooting the
+specified 0.25–0.4x. The spec's detail diagram shows a *flat radial end with
+small rounded corners*, which a line cap cannot express at all.
+
+Segments are now **annular-sector paths** (`src/lib/donut-geometry.js`) with the
+corner radius decoupled from the ring thickness — set to 0.32x, mid-range. Each
+visible slice is guaranteed enough arc for its corners plus the gap, taken
+proportionally from slices that can spare it, so thickness stays uniform rather
+than thinning small slices. Hit areas use the same allocation, so taps still
+land on the segment under the finger.
 
 Fixed in both `src/components/charts/DonutChart.jsx` and the legacy `app.js`.
 
 ```bash
-npm run build && node donut-spec.mjs   # 6/6 spec requirements met
+npm run build && node donut-spec.mjs   # 11/11
 ```
 
-Verified across single-segment, one-dominant-plus-sliver, five-slivers,
-all-equal and ten-segment datasets — gaps stay within 2.99–3.01px and the ring
-keeps a single 24.5px thickness in every case.
+`donut-spec.mjs` rasterises the real component with resvg and measures actual
+pixels — ring thickness, every gap, and the corner inset — rather than trusting
+the markup. Verified across single-segment, dominant-plus-sliver, five-slivers,
+all-equal and ten-segment datasets: gaps stay within 2.92–3.12px and the ring
+holds a uniform 24.40px throughout.
 
 ---
 

@@ -2,20 +2,23 @@ import { useEffect, useRef } from 'react';
 
 import { el } from '@/lib/dom.js';
 import { t } from '@/lib/i18n.js';
+import {
+  CORNER_RATIO, SEGMENT_GAP, allocateArcs, sectorPath,
+} from '@/lib/donut-geometry.js';
 
 /**
- * Interactive donut — ported verbatim from legacy `donutChart`.
+ * Interactive donut, drawn to the Donut Chart spec sheet.
  *
- * The rounded-cap geometry (round line caps, a trimmed dash array so the final
- * cap-to-cap gap stays 3px) is the behaviour described in the donut spec image
- * in the repo and is deliberately left untouched in phase 1.
+ * Segments are annular-sector paths with independently controlled corner radii
+ * (0.25–0.4x the ring thickness) rather than `stroke-linecap="round"`, which is
+ * locked to a 0.5x semicircular dome and turns small slices into pills.
+ * See src/lib/donut-geometry.js for the geometry and the reasoning.
  */
 function donutChart(segments, opts) {
   opts = opts || {};
   const size = 196, cx = size / 2, cy = size / 2;
   const r = size * 0.37, sw = size * 0.125;
   const C = 2 * Math.PI * r;
-  const GAP = 3; // final visible separation between neighbouring rounded caps
   const total = segments.reduce((s, x) => s + x.minutes, 0) || 0;
   const drawable = segments.filter((seg) => total && seg.minutes > 0);
   const wrap = el('div', 'donut-wrap');
@@ -28,89 +31,60 @@ function donutChart(segments, opts) {
     })[char]);
   }
 
-  /*
-   * Arc allocation.
-   *
-   * A round line cap extends half a stroke width past each end, so a segment
-   * inks (dash length + stroke width). To leave GAP between neighbours the
-   * dash is trimmed by (stroke width + GAP) — meaning a segment needs at
-   * least that much arc to render at all.
-   *
-   * Previously a tiny slice kept the full stroke width and clamped its dash to
-   * a minimum, so its two caps painted a ~24px blob over a ~9px arc and bled
-   * into the neighbour (the "过度圆滑粘连" failure mode in the spec sheet).
-   *
-   * Instead, guarantee every visible slice a minimum arc and take that space
-   * proportionally from the slices that can spare it. The ring keeps a single
-   * uniform thickness (spec item 4), neighbours stay cleanly separated by GAP
-   * (items 3 and 5), and the arcs remain as close to the data as the geometry
-   * allows.
-   */
-  const maxStroke = selectedKey ? sw + 6 : sw;
-  const minArc = maxStroke + GAP + 0.5;
-  const arcs = drawable.map((seg) => (seg.minutes / total) * C);
-  const needy = arcs.filter((a) => a < minArc);
+  // A selected segment grows by 6px; budget the arc for the widest it can get
+  // so selecting one never makes its neighbours collide.
+  const maxStroke = sw + 6;
+  const corner = sw * CORNER_RATIO;
+  const minArc = 2 * corner + SEGMENT_GAP + 1;
+  const arcs = allocateArcs(drawable.map((s) => s.minutes), C, minArc);
 
-  if (drawable.length > 1 && needy.length && needy.length < drawable.length) {
-    const deficit = needy.reduce((s, a) => s + (minArc - a), 0);
-    const donors = arcs.reduce((s, a) => s + (a > minArc ? a - minArc : 0), 0);
-    if (donors > deficit) {
-      const ratio = deficit / donors;
-      for (let i = 0; i < arcs.length; i++) {
-        if (arcs[i] < minArc) arcs[i] = minArc;
-        else arcs[i] -= (arcs[i] - minArc) * ratio;
-      }
-    }
-  }
-
-  let circles = '';
+  let paths = '';
   let cursor = 0;
   drawable.forEach((seg, i) => {
     const arc = arcs[i];
     const isSel = selectedKey === seg.key;
-    const w = isSel ? sw + 6 : sw;
+    const w = isSel ? maxStroke : sw;
     const opacity = selectedKey && !isSel ? 0.22 : 1;
-    let dash = '';
 
-    if (drawable.length > 1) {
-      const trim = w + GAP;
-      const len = Math.max(0.01, arc - trim);
-      const start = cursor + trim / 2;
-      dash = ' stroke-dasharray="' + len.toFixed(2) + ' ' + (C - len).toFixed(2)
-        + '" stroke-dashoffset="' + (-start).toFixed(2) + '"';
-    }
-
-    circles += '<circle cx="' + cx + '" cy="' + cy + '" r="' + r
-      + '" fill="none" stroke="' + attr(seg.color) + '" stroke-width="' + w
-      + '" stroke-linecap="round"' + dash
-      + ' transform="rotate(-90 ' + cx + ' ' + cy + ')" opacity="' + opacity
-      + '" style="transition: opacity 0.18s ease, stroke-width 0.18s ease"/>';
+    // Half the gap is taken from each side, expressed as an angle on the
+    // centreline so the visible separation stays constant in px.
+    const inset = drawable.length > 1 ? (SEGMENT_GAP / 2) / r : 0;
+    const a0 = ((cursor / C) * 2 * Math.PI) - Math.PI / 2 + inset;
+    const a1 = (((cursor + arc) / C) * 2 * Math.PI) - Math.PI / 2 - inset;
     cursor += arc;
+    if (a1 <= a0) return;
+
+    const d = sectorPath(cx, cy, r - w / 2, r + w / 2, a0, a1, w * CORNER_RATIO);
+    if (!d) return;
+
+    paths += '<path d="' + d + '" fill="' + attr(seg.color) + '"'
+      + ' opacity="' + opacity + '"'
+      + ' style="transition: opacity 0.18s ease"/>';
   });
 
-  // Hit areas follow the same allocation as the drawn arcs, so a tap always
-  // lands on the segment actually under the finger.
+  // Transparent hit areas: generous stroke width for comfortable tap targets,
+  // following the same allocation so a tap lands on the segment under it.
   let hit = '';
   cursor = 0;
   drawable.forEach((seg, i) => {
     const arc = arcs[i];
     let dash = '';
     if (drawable.length > 1) {
-      const len = Math.max(0.1, arc - GAP);
-      const start = cursor + GAP / 2;
+      const len = Math.max(0.1, arc - SEGMENT_GAP);
+      const start = cursor + SEGMENT_GAP / 2;
       dash = ' stroke-dasharray="' + len.toFixed(2) + ' ' + (C - len).toFixed(2)
         + '" stroke-dashoffset="' + (-start).toFixed(2) + '"';
     }
+    cursor += arc;
     hit += '<circle data-key="' + attr(seg.key) + '" cx="' + cx + '" cy="' + cy
       + '" r="' + r + '" fill="none" stroke="transparent" stroke-width="' + (sw + 26)
       + '" stroke-linecap="butt"' + dash + ' transform="rotate(-90 ' + cx + ' ' + cy
       + ')" tabindex="0" role="button" aria-label="' + attr(seg.name) + '"/>';
-    cursor += arc;
   });
 
   svgBox.innerHTML = '<svg width="' + size + '" height="' + size + '" viewBox="0 0 '
     + size + ' ' + size + '" role="group" aria-label="' + attr(t('timeDistribution')) + '">'
-    + circles + hit + '</svg>';
+    + paths + hit + '</svg>';
   const center = el('div', 'donut-center');
   const topEl = el('div', 'dc-top');
   const subEl = el('div', 'dc-sub');
