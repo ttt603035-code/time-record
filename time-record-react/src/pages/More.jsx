@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef } from 'react';
 
-import { openImportGuide } from '@/components/ImportGuideModal.js';
+import { openImportGuide } from '@/components/ImportGuideModal.jsx';
 import { openTemplatesModal } from '@/components/TemplatesModal.js';
 import { StatTile } from '@/components/insights/StatTile.jsx';
 import { CATEGORY_KEY, SETTINGS_KEY, STORAGE_KEY } from '@/lib/constants.js';
