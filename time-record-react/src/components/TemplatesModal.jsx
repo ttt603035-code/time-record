@@ -21,9 +21,10 @@ import { Label } from '@/components/ui/label.jsx';
 import { ColorSwatches } from '@/components/ColorSwatches.jsx';
 import { EVENT_COLORS } from '@/lib/constants.js';
 import { t } from '@/lib/i18n.js';
+import { useAlertDialog } from '@/hooks/useAlertDialog.jsx';
 import { normalizeCategory } from '@/lib/model.js';
 import { el } from '@/lib/dom.js';
-import { openStudyModal, showDialog, toast } from '@/lib/overlays.js';
+import { openStudyModal, toast } from '@/lib/overlays.js';
 import { cn } from '@/lib/utils.js';
 
 let tplApi = null;
@@ -171,6 +172,7 @@ function TemplateForm({ cat, onSave, onCancel }) {
 function TemplatesManager({ ctx }) {
   // 'list' | { editing: cat|null }
   const [view, setView] = useState('list');
+  const { showDialog, dialog } = useAlertDialog();
   // Bump to re-read categories/events after a save or delete.
   const [, force] = useState(0);
   const refresh = () => force((n) => n + 1);
@@ -217,22 +219,28 @@ function TemplatesManager({ ctx }) {
 
   if (view === 'list') {
     return (
-      <TemplateList
-        categories={categories}
-        events={events}
-        onEdit={(cat) => setView({ editing: cat })}
-        onAdd={() => setView({ editing: null })}
-        onDelete={remove}
-      />
+      <>
+        <TemplateList
+          categories={categories}
+          events={events}
+          onEdit={(cat) => setView({ editing: cat })}
+          onAdd={() => setView({ editing: null })}
+          onDelete={remove}
+        />
+        {dialog}
+      </>
     );
   }
 
   return (
-    <TemplateForm
-      cat={view.editing}
-      onSave={save}
-      onCancel={() => setView('list')}
-    />
+    <>
+      <TemplateForm
+        cat={view.editing}
+        onSave={save}
+        onCancel={() => setView('list')}
+      />
+      {dialog}
+    </>
   );
 }
 

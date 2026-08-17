@@ -401,7 +401,8 @@ check('Cancel discards template changes', !storedCats().find((c) => c.name === '
 const catsBeforeDelete = storedCats().length;
 clickEl(window, tplRows().find((b) => b.getAttribute('aria-label').includes('reading')));
 await tick(500);
-check('Template delete confirmation opens', $$(doc, '#overlays .dialog').length === 1);
+check('Template delete confirmation opens',
+  $$(doc, '[data-slot="alert-dialog-content"]').length === 1);
 clickEl(window, $(doc, '.dialog-actions button.is-danger'));
 await tick(800);
 check('Template deleted and list refreshed',
@@ -481,7 +482,17 @@ check('Delete action available in edit mode', !!deleteBtn);
 // Delete it.
 clickEl(window, deleteBtn);
 await tick(450);
-check('Delete confirmation dialog opens', $$(doc, '#overlays .dialog').length === 1);
+check('Delete confirmation dialog opens',
+  $$(doc, '[data-slot="alert-dialog-content"]').length === 1);
+// The confirmation is a Radix AlertDialog now. Two things the old imperative
+// dialog never did, and the reason for the swap:
+check('Confirm dialog is an alertdialog that hides the page behind it',
+  $(doc, '[data-slot="alert-dialog-content"]')?.getAttribute('role') === 'alertdialog'
+  && $(doc, '#root')?.getAttribute('aria-hidden') === 'true');
+// It must escape the event-form modal it was opened from, or it would be
+// clipped by that modal's own stacking context.
+check('Confirm dialog portals out of the modal that opened it',
+  !$(doc, '.study-modal')?.contains($(doc, '[data-slot="alert-dialog-content"]')));
 clickEl(window, $(doc, '.dialog-actions button.is-danger'));
 await tick(800);
 const afterDelete = JSON.parse(window.localStorage.getItem('calendar_events_v1')).events;

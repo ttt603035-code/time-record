@@ -2019,3 +2019,30 @@ textarea.text-input { resize: none; line-height: 1.45; }
 @keyframes sheet-fade-out { from { opacity: 1; } to { opacity: 0; } }
 @keyframes sheet-slide-up { from { transform: translateY(102%); } to { transform: translateY(0); } }
 @keyframes sheet-slide-down { from { transform: translateY(0); } to { transform: translateY(102%); } }
+
+/* ═══════════════ Phase 2: shadcn AlertDialog (Radix) ═══════════════
+   Same iOS alert skin as before; only the open/close trigger changes from a
+   toggled .is-open class to Radix's data-state attribute. */
+
+.dialog-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.28);
+  z-index: 75;
+}
+.dialog-overlay[data-state='open'] { animation: sheet-fade-in 0.18s ease both; }
+.dialog-overlay[data-state='closed'] { animation: sheet-fade-out 0.18s ease both; }
+
+/* Radix positions nothing itself; the .dialog rule above still owns layout.
+   These only replace the .is-open transition. */
+.dialog[data-state='open'] { animation: dialog-in 0.2s var(--ease-out) both; }
+.dialog[data-state='closed'] { animation: dialog-out 0.18s ease both; }
+
+@keyframes dialog-in {
+  from { opacity: 0; transform: translate(-50%, -46%) scale(0.94); }
+  to   { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+}
+@keyframes dialog-out {
+  from { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+  to   { opacity: 0; transform: translate(-50%, -46%) scale(0.94); }
+}

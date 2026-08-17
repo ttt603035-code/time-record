@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 
 import { openImportGuide } from '@/components/ImportGuideModal.jsx';
+import { useAlertDialog } from '@/hooks/useAlertDialog.jsx';
 import { openTemplatesModal } from '@/components/TemplatesModal.jsx';
 import { Button } from '@/components/ui/button.jsx';
 import {
@@ -15,7 +16,7 @@ import { DataService } from '@/lib/data-service.js';
 import { todayISO } from '@/lib/date.js';
 import { I } from '@/lib/dom.js';
 import { getLang, t } from '@/lib/i18n.js';
-import { showDialog, toast } from '@/lib/overlays.js';
+import { toast } from '@/lib/overlays.js';
 import { importPayload } from '@/lib/shortcut-import.js';
 import { StorageService } from '@/lib/storage.js';
 import { formatBytes } from '@/lib/analytics.js';
@@ -83,6 +84,7 @@ export function MorePage({
 }) {
   const fileInputRef = useRef(null);
   const [keysOpen, setKeysOpen] = useState(false);
+  const { showDialog, dialog } = useAlertDialog();
   // Always hand the modals the freshest data without rebuilding them.
   const dataRef = useRef({ events, categories });
   dataRef.current = { events, categories };
@@ -363,6 +365,8 @@ export function MorePage({
           </CardContent>
         </Card>
       </div>
+
+      {dialog}
     </main>
   );
 }

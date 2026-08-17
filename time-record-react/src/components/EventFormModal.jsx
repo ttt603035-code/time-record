@@ -16,15 +16,17 @@ import { createPortal } from 'react-dom';
 
 import { Button } from '@/components/ui/button.jsx';
 import { EventFormFields } from '@/components/EventFormFields.jsx';
+import { useAlertDialog } from '@/hooks/useAlertDialog.jsx';
 import { addMinutes, todayISO } from '@/lib/date.js';
 import { el } from '@/lib/dom.js';
 import { t } from '@/lib/i18n.js';
 import { DEFAULT_CATEGORIES, normalizeCategory, normalizeEvent } from '@/lib/model.js';
-import { openStudyModal, showDialog, toast } from '@/lib/overlays.js';
+import { openStudyModal, toast } from '@/lib/overlays.js';
 import { defaultTimes } from '@/lib/analytics.js';
 
 /** The stateful form: draft state, validation, save/delete. */
 function EventForm({ existing, initialDate, categories, onCreate, onUpdate, onDelete, close }) {
+  const { showDialog, dialog } = useAlertDialog();
   const [draft, setDraft] = useState(() => {
     const def = defaultTimes(initialDate, todayISO());
     return {
@@ -110,6 +112,7 @@ function EventForm({ existing, initialDate, categories, onCreate, onUpdate, onDe
         onCancel={close}
         onSubmit={save}
       />
+      {dialog}
     </>
   );
 }
