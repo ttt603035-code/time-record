@@ -164,6 +164,32 @@ Add more with `npx shadcn@latest add <component>`.
 Per the phase-1 brief, **no existing UI was rewritten to use shadcn.** That is
 phase 2.
 
+### shadcn Skills (AI assistant context)
+
+`npx skills add shadcn/ui` is installed, so an AI assistant working in this repo
+gets project-aware shadcn context — it reads `components.json` for the
+framework, aliases, base library, icon library and installed components, and
+follows the correct composition patterns instead of guessing.
+
+```
+.agents/skills/shadcn/                 the skill (canonical copy)
+.agents/skills/migrate-radix-to-base/  bundled alongside it
+.claude/skills/*                       symlinks into .agents/
+skills-lock.json                       pinned source + content hashes
+```
+
+Documentation only — no runtime dependency, nothing imported by the app, and
+Tailwind only scans `src/`, so the bundle is unchanged. Update with
+`npx skills add shadcn/ui --yes`.
+
+Two notes on this install:
+
+- The installer also wrote an `agent/` directory duplicating `.agents/`
+  byte-for-byte (only the SKILL.md frontmatter format differs). It was removed
+  to avoid two divergent copies; `.agents/` is what the symlinks resolve to.
+- `shadcn info --json` needs network access to `ui.shadcn.com`, which this
+  sandbox blocks. It will work normally on your machine.
+
 ---
 
 ## Verification
