@@ -1,0 +1,40 @@
+/* ============================================================
+   shadcn/ui base layer
+   ------------------------------------------------------------
+   Phase 1 note: Tailwind's preflight is disabled (see
+   tailwind.config.js). The app's visual language still comes
+   entirely from `styles.css` — the untouched stable stylesheet.
+
+   These tokens are namespaced with `--sh-` so they can never
+   collide with the legacy design tokens (`--bg`, `--text`,
+   `--accent`, …) defined in styles.css.
+   ============================================================ */
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --sh-background: 0 0% 100%;
+    --sh-foreground: 240 4% 12%;
+    --sh-card: 0 0% 100%;
+    --sh-card-foreground: 240 4% 12%;
+    --sh-popover: 0 0% 100%;
+    --sh-popover-foreground: 240 4% 12%;
+    --sh-primary: 240 4% 12%;
+    --sh-primary-foreground: 0 0% 100%;
+    --sh-secondary: 240 5% 96%;
+    --sh-secondary-foreground: 240 4% 12%;
+    --sh-muted: 240 5% 96%;
+    --sh-muted-foreground: 240 4% 46%;
+    --sh-accent: 240 5% 96%;
+    --sh-accent-foreground: 240 4% 12%;
+    --sh-destructive: 4 100% 59%;
+    --sh-destructive-foreground: 0 0% 100%;
+    --sh-border: 240 6% 90%;
+    --sh-input: 240 6% 90%;
+    --sh-ring: 240 4% 12%;
+    --radius: 0.75rem;
+  }
+}
