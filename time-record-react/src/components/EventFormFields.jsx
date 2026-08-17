@@ -3,7 +3,8 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { Input } from '@/components/ui/input.jsx';
 import { Label } from '@/components/ui/label.jsx';
 import { Textarea } from '@/components/ui/textarea.jsx';
-import { COLOR_ORDER, EVENT_COLORS } from '@/lib/constants.js';
+import { ColorSwatches } from '@/components/ColorSwatches.jsx';
+import { EVENT_COLORS } from '@/lib/constants.js';
 import { formatShortDate, t } from '@/lib/i18n.js';
 import { buildDateWheel, buildTimeWheel } from '@/lib/overlays.js';
 import { cn } from '@/lib/utils.js';
@@ -202,37 +203,7 @@ export function EventFormFields({
       {/* Color */}
       <div>
         <Label className="mb-1.5 text-xs text-muted-foreground">{t('color')}</Label>
-        <div className="flex gap-3">
-          {COLOR_ORDER.map((c) => {
-            const on = draft.color === c;
-            return (
-              <button
-                key={c}
-                type="button"
-                aria-label={'Color ' + c}
-                aria-pressed={on}
-                onClick={() => onPatch({ color: c })}
-                className={cn(
-                  'inline-flex size-[30px] items-center justify-center rounded-full text-white transition-transform',
-                  'active:scale-90',
-                  on && 'scale-110 ring-2 ring-offset-2 ring-offset-background',
-                )}
-                style={{
-                  background: EVENT_COLORS[c],
-                  ...(on ? { '--tw-ring-color': EVENT_COLORS[c] } : null),
-                }}
-              >
-                <svg
-                  viewBox="0 0 24 24"
-                  aria-hidden="true"
-                  className={cn('size-4 transition-opacity', on ? 'opacity-100' : 'opacity-0')}
-                >
-                  <path d="M5 12.5l4.5 4.5L19 7.5" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round" />
-                </svg>
-              </button>
-            );
-          })}
-        </div>
+        <ColorSwatches value={draft.color} onChange={(c) => onPatch({ color: c })} />
       </div>
 
       {/* Note */}

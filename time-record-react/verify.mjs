@@ -253,13 +253,86 @@ check('Storage key names unchanged',
   && keyNames.includes('calendar_settings_v1'), keyNames.join(','));
 check('Four About rows', $$(doc, '.settings-row').length === 4);
 
-// Templates modal.
+// Templates modal. Phase 2: React + shadcn, so rows are identified by their
+// delete button's aria-label rather than the legacy .tpl-row class.
 clickEl(window, $(doc, '.settings-row'));
 await tick(600);
+const tplRows = () => $$(doc, '.study-modal button[aria-label^="Delete "]');
+const storedCats = () => JSON.parse(window.localStorage.getItem('calendar_categories_v1'));
+const modalBtn = (label) => $$(doc, '.study-modal-foot [data-slot="button"]')
+  .find((b) => b.textContent.includes(label));
+const primaryBtn = () => $$(doc, '.study-modal-foot [data-slot="button"]')
+  .find((b) => b.getAttribute('data-variant') === 'default');
+
 check('Event Templates modal opens', $$(doc, '#overlays .study-modal').length === 1);
-check('Template rows listed', $$(doc, '.tpl-row').length === 6,
-  `${$$(doc, '.tpl-row').length} templates`);
-check('Add Template button', !!$$(doc, '.study-modal-foot .btn-primary')[0]);
+check('Template rows listed', tplRows().length === 6, `${tplRows().length} templates`);
+check('Add Template button', !!modalBtn('Add Template'));
+
+// Edit an existing template: rename + recolour.
+clickEl(window, $$(doc, '.study-modal button').find((b) => b.textContent.includes('English')));
+await tick(600);
+check('Template edit form opens prefilled', $(doc, '#tpl-name')?.value === 'English');
+check('Template colour picker has 5 swatches',
+  $$(doc, '.study-modal button[aria-label^="Color "]').length === 5);
+setReactValue(window, $(doc, '#tpl-name'), 'English Reading');
+await tick(200);
+clickEl(window, $$(doc, '.study-modal button[aria-label^="Color "]')[2]); // pink
+await tick(200);
+clickEl(window, primaryBtn());
+await tick(800);
+const editedCat = storedCats().find((c) => c.id === 'cat_english');
+check('Template rename persisted', editedCat?.name === 'English Reading', editedCat?.name);
+check('Template recolour persisted', editedCat?.color === 'pink', editedCat?.color);
+check('Template count unchanged by an edit', storedCats().length === 6);
+check('Returns to the list after saving', !$(doc, '#tpl-name'));
+
+// Add a template.
+clickEl(window, modalBtn('Add Template'));
+await tick(600);
+setReactValue(window, $(doc, '#tpl-name'), 'Reading');
+await tick(200);
+clickEl(window, primaryBtn());
+await tick(800);
+check('Template added', storedCats().length === 7 && !!storedCats().find((c) => c.name === 'Reading'),
+  `${storedCats().length} templates`);
+
+// An empty name is rejected.
+clickEl(window, modalBtn('Add Template'));
+await tick(600);
+clickEl(window, primaryBtn());
+await tick(500);
+check('Empty template name rejected',
+  !!$(doc, '#tpl-name') && $(doc, '#tpl-name').getAttribute('aria-invalid') === 'true'
+  && storedCats().length === 7);
+
+// Same name (case-insensitive) merges instead of duplicating.
+setReactValue(window, $(doc, '#tpl-name'), 'reading');
+await tick(200);
+clickEl(window, primaryBtn());
+await tick(800);
+check('Same-name template merges, never duplicates', storedCats().length === 7,
+  `${storedCats().length} templates`);
+
+// Cancel discards the edit.
+clickEl(window, $$(doc, '.study-modal button').find((b) => b.textContent.includes('Work')));
+await tick(600);
+setReactValue(window, $(doc, '#tpl-name'), 'Discarded');
+await tick(200);
+clickEl(window, $$(doc, '.study-modal-foot [data-slot="button"]').find((b) => b.textContent === 'Cancel'));
+await tick(600);
+check('Cancel discards template changes', !storedCats().find((c) => c.name === 'Discarded'));
+
+// Delete.
+const catsBeforeDelete = storedCats().length;
+clickEl(window, tplRows().find((b) => b.getAttribute('aria-label').includes('reading')));
+await tick(500);
+check('Template delete confirmation opens', $$(doc, '#overlays .dialog').length === 1);
+clickEl(window, $(doc, '.dialog-actions button.is-danger'));
+await tick(800);
+check('Template deleted and list refreshed',
+  storedCats().length === catsBeforeDelete - 1 && tplRows().length === catsBeforeDelete - 1,
+  `${catsBeforeDelete} → ${storedCats().length}`);
+
 clickEl(window, $(doc, '.study-modal-close'));
 await tick(450);
 
@@ -296,7 +369,11 @@ await tick(350);
 const titleInput = $(doc, '.study-modal [data-slot="input"]');
 setReactValue(window, titleInput, 'Migration Test Event');
 await tick(200);
-clickEl(window, $(doc, '.study-modal button[aria-pressed]'));
+// Capture the chip's own label: the templates section above renamed the first
+// template, so this must not assume a fixed name.
+const firstChip = $(doc, '.study-modal button[aria-pressed]');
+const firstChipName = firstChip.textContent.trim();
+clickEl(window, firstChip);
 await tick(300);
 const saveBtn = $$(doc, '.study-modal-foot [data-slot="button"]')
   .find((b) => b.getAttribute('data-variant') === 'default');
@@ -308,7 +385,10 @@ check('Event persisted to localStorage', afterSave.length === countBefore + 1,
   `${countBefore} → ${afterSave.length}`);
 const created = afterSave.find((e) => e.title === 'Migration Test Event');
 check('Saved event has the full schema', created && SCHEMA.every((k) => k in created));
-check('Category applied from chip', created?.category === 'English', created?.category);
+check('Category applied from chip', created?.category === firstChipName,
+  `${created?.category} (chip: ${firstChipName})`);
+check('Template edits flow through to the event form chips',
+  firstChipName === 'English Reading', firstChipName);
 check('Toast confirmation shown', $(doc, '#toast')?.classList.contains('is-visible'));
 check('New event appears in the day list',
   $$(doc, '.event-card').some((c) => c.textContent.includes('Migration Test Event')));
