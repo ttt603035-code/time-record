@@ -762,6 +762,34 @@ check('CSS: safe-area insets retained', css.includes('safe-area-inset'));
 check('CSS: touch-action retained', css.includes('touch-action'));
 check('CSS: no tap highlight retained', css.includes('-webkit-tap-highlight-color'));
 check('CSS: reduced-motion block retained', css.includes('prefers-reduced-motion'));
+
+// ── Page entrance animation ──────────────────────────────────────────────
+// Subtle by contract: one animation on the screen container, 250–400ms, eased,
+// small offset. These bounds are the spec, so a future "let's make it pop"
+// edit fails here rather than shipping.
+const screenRule = css.match(/\.screen\{[^}]*\}/)?.[0] || '';
+const screenKf = css.match(/@keyframes screenIn\{([^}]*\}[^}]*)\}/)?.[1] || '';
+const screenDur = Number(screenRule.match(/screenIn (\.?\d*\.?\d+)s/)?.[1]);
+check('Page transition: duration is 250-400ms',
+  screenDur >= 0.25 && screenDur <= 0.4, `${screenDur}s`);
+check('Page transition: eased, not linear',
+  /var\(--ease-out\)|cubic-bezier/.test(screenRule));
+check('Page transition: fill mode both (no un-animated first paint)',
+  /\bboth\b/.test(screenRule));
+check('Page transition: starts transparent', /opacity:0/.test(screenKf));
+const screenShift = Number(screenKf.match(/translateY\((\d+(?:\.\d+)?)px\)/)?.[1]);
+check('Page transition: rise is a subtle 6-10px',
+  screenShift >= 6 && screenShift <= 10, `${screenShift}px`);
+const screenScale = Number(screenKf.match(/scale\((\.\d+)\)/)?.[1]);
+check('Page transition: scale is a barely-there 0.985-1',
+  screenScale >= 0.985 && screenScale < 1, `${screenScale}`);
+// The whole page animates as one surface; cards must not stagger in.
+const screenInTargets = [...css.matchAll(/([^{}]+)\{[^}]*animation:screenIn/g)].map((m) => m[1]);
+check('Page transition: applied only to the screen container, not per component',
+  screenInTargets.length === 1 && screenInTargets[0].trim() === '.screen',
+  screenInTargets.join(' | '));
+check('Page transition: disabled outright under reduced motion',
+  /\.screen\{animation:none!important\}/.test(css.replace(/\s+/g, '')));
 // The CSS minifier lowercases hex colours, so compare case-insensitively.
 check('CSS: legacy design tokens intact',
   css.includes('--c-blue') && css.includes('--tabbar-h')

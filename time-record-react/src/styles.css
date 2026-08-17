@@ -95,12 +95,18 @@ svg { display: block; }
 
 /* ───────────────────────── Screens ───────────────────────── */
 
-.screen { display: none; animation: screenIn 0.24s var(--ease-out); }
+/* Page entrance. One animation on the screen container, so a view arrives as a
+   single coherent surface rather than a cascade of individually animating
+   cards. The tab bar and every overlay live outside .screen and are untouched.
+
+   `both` holds the first frame, so a screen can never paint at full opacity
+   before the animation starts. */
+.screen { display: none; animation: screenIn 0.3s var(--ease-out) both; }
 .screen.is-active { display: block; }
 
 @keyframes screenIn {
-  from { opacity: 0; transform: translateY(6px); }
-  to   { opacity: 1; transform: translateY(0); }
+  from { opacity: 0; transform: translateY(8px) scale(0.99); }
+  to   { opacity: 1; transform: translateY(0) scale(1); }
 }
 
 /* ───────────────────────── Top bar ───────────────────────── */
@@ -1964,6 +1970,12 @@ textarea.text-input { resize: none; line-height: 1.45; }
     transition-duration: 0.01ms !important;
     animation-duration: 0.01ms !important;
   }
+
+  /* Collapsing the duration alone would leave the page entrance frozen on its
+     first keyframe (opacity 0) because it uses fill-mode `both`. Remove the
+     animation outright so the screen simply appears, fully opaque and in
+     place. */
+  .screen { animation: none !important; }
 }
 
 /* ═══════════════ Phase 2: shadcn Sheet (Radix Dialog) ═══════════════
