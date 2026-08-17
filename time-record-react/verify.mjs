@@ -166,12 +166,17 @@ check('Month range activates', $(doc, '.seg-btn.is-active')?.textContent === 'Mo
 // with their own role/aria-label rather than the old hit-area circles.
 check('Donut segments drawn', $$(doc, '.donut-svg path[role="button"]').length > 0,
   `${$$(doc, '.donut-svg path[role="button"]').length} segments`);
-// Segments are annular-sector paths with independently controlled corner radii
-// (spec: 0.25–0.4x thickness), not stroke-linecap="round" which is locked to
-// 0.5x. donut-spec.mjs measures the rendered geometry in detail.
-check('Donut segments are rounded-corner sector paths',
-  $$(doc, '.donut-svg path').length > 0,
-  `${$$(doc, '.donut-svg path').length} paths`);
+// The donut uses the stock shadcn/ui Chart (Recharts) appearance, but must keep
+// the app's own category palette rather than the shadcn chart tokens.
+const donutFills = $$(doc, '.donut-svg path[role="button"]')
+  .map((p) => (p.getAttribute('fill') || '').toLowerCase());
+const palette = ['#6fa8dc', '#b49bd9', '#f0a3b6', '#86c79b', '#f1b973'];
+check('Donut segments use the app category palette',
+  donutFills.length > 0 && donutFills.every((f) => palette.includes(f)),
+  donutFills.join(' '));
+check('Donut is one sector path per category',
+  $$(doc, '.donut-svg path[role="button"]').length === $$(doc, '.rank-row').length,
+  `${$$(doc, '.donut-svg path[role="button"]').length} sectors vs ${$$(doc, '.rank-row').length} legend rows`);
 check('Donut center total shown', !!$(doc, '.dc-top')?.textContent);
 check('Ranked legend rows', $$(doc, '.rank-row').length > 0,
   `${$$(doc, '.rank-row').length} categories`);
