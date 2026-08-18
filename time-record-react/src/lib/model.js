@@ -11,7 +11,7 @@
    what the Apple Shortcuts URL pipeline relies on.
    ============================================================ */
 
-import { EVENT_COLORS } from './constants.js';
+import { normalizeColorValue } from './constants.js';
 import { todayISO, validDate, validTime } from './date.js';
 
 export function genId() {
@@ -28,7 +28,7 @@ export function normalizeEvent(e) {
     endTime: validTime(e.endTime) ? e.endTime : '10:00',
     title: (typeof e.title === 'string' && e.title.trim()) ? e.title.trim() : 'Untitled',
     category: typeof e.category === 'string' ? e.category : '',
-    color: EVENT_COLORS[e.color] ? e.color : 'blue',
+    color: normalizeColorValue(e.color),
     note: typeof e.note === 'string' ? e.note : '',
     createdAt: typeof e.createdAt === 'string' ? e.createdAt : now,
     updatedAt: typeof e.updatedAt === 'string' ? e.updatedAt : now,
@@ -63,7 +63,7 @@ export function normalizeCategory(c) {
   return {
     id: (typeof c.id === 'string' && c.id) ? c.id : 'cat_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6),
     name: (typeof c.name === 'string' && c.name.trim()) ? c.name.trim() : 'Untitled',
-    color: EVENT_COLORS[c.color] ? c.color : 'blue',
+    color: normalizeColorValue(c.color),
   };
 }
 

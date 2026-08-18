@@ -48,6 +48,24 @@ export const COLOR_ORDER = [
   'indigo', 'brown', 'gray',
 ];
 
+const HEX_COLOR = /^#[0-9A-Fa-f]{6}$/;
+
+export function resolveColor(c) {
+  if (EVENT_COLORS[c]) return EVENT_COLORS[c];
+  if (typeof c === 'string' && HEX_COLOR.test(c)) return c.toUpperCase();
+  return EVENT_COLORS.blue;
+}
+
+export function normalizeColorValue(c) {
+  if (EVENT_COLORS[c]) return c;
+  if (typeof c === 'string' && HEX_COLOR.test(c)) return c.toUpperCase();
+  return 'blue';
+}
+
+export function isCustomColor(c) {
+  return typeof c === 'string' && HEX_COLOR.test(c);
+}
+
 export const ITEM_H = 40; // wheel picker item height (px)
 
 export const ZH_WEEKDAYS = ['一', '二', '三', '四', '五', '六', '日'];

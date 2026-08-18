@@ -1,14 +1,16 @@
-import { COLOR_ORDER, EVENT_COLORS } from '@/lib/constants.js';
+import { COLOR_ORDER, EVENT_COLORS, isCustomColor, normalizeColorValue, resolveColor } from '@/lib/constants.js';
+import { t } from '@/lib/i18n.js';
 import { cn } from '@/lib/utils.js';
 
 /**
  * The colour picker, shared by the event form and the template form.
  *
- * Extracted during the phase-2 shadcn work: both forms had their own copy of
- * this markup and selection logic. Wraps onto multiple rows now that the
- * palette covers the full set of Apple system colours.
+ * Named swatches stay the original Apple-muted palette. A native
+ * `<input type="color">` sits at the end so iPhone can open its system
+ * colour picker for categories that would otherwise collide.
  */
 export function ColorSwatches({ value, onChange }) {
+  const customOn = isCustomColor(value);
   return (
     <div className="flex flex-wrap gap-3">
       {COLOR_ORDER.map((c) => {
@@ -47,6 +49,21 @@ export function ColorSwatches({ value, onChange }) {
           </button>
         );
       })}
+      <label
+        className={cn(
+          'swatch swatch-custom relative inline-flex size-[30px] items-center justify-center overflow-hidden rounded-full',
+          customOn && 'scale-110 ring-2 ring-offset-2 ring-offset-background',
+        )}
+        aria-label={t('pickColor')}
+        style={customOn ? { background: value, '--tw-ring-color': value } : undefined}
+      >
+        <input
+          type="color"
+          value={resolveColor(value)}
+          aria-label={t('pickColor')}
+          onChange={(e) => onChange(normalizeColorValue(e.target.value))}
+        />
+      </label>
     </div>
   );
 }

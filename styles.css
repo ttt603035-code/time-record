@@ -58,6 +58,7 @@ html {
   -webkit-text-size-adjust: 100%;
   touch-action: manipulation;
 }
+html, body, .app, button, a, input, textarea { touch-action: manipulation; }
 
 body {
   font-family: var(--font);
@@ -987,7 +988,22 @@ textarea.text-input { resize: none; line-height: 1.45; }
 
 /* ───────────────────────── Color swatches ───────────────────────── */
 
-.swatches { display: flex; gap: 12px; }
+.swatches { display: flex; flex-wrap: wrap; gap: 12px; }
+.swatch-custom {
+  position: relative;
+  overflow: hidden;
+  background: conic-gradient(#6FA8DC, #86C79B, #E8C468, #E58B84, #B49BD9, #6FA8DC);
+}
+.swatch-custom input[type='color'] {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  width: 100%;
+  height: 100%;
+  cursor: pointer;
+  border: none;
+  padding: 0;
+}
 .swatch {
   width: 30px;
   height: 30px;
@@ -1958,19 +1974,20 @@ textarea.text-input { resize: none; line-height: 1.45; }
 .sync-actions { display: flex; align-items: center; gap: 6px; }
 .sync-chip { font-variant-numeric: tabular-nums; }
 .sync-refresh {
-  width: 30px;
-  height: 30px;
-  border-radius: var(--radius-pill);
-  border: 1px solid var(--border);
-  background: var(--surface);
+  width: 22px;
+  height: 22px;
+  border-radius: 0;
+  border: none;
+  background: transparent;
+  box-shadow: none;
   color: var(--text-2);
   display: inline-flex;
   align-items: center;
   justify-content: center;
   padding: 0;
 }
-.sync-refresh svg { width: 14px; height: 14px; }
-.sync-refresh:active { opacity: 0.6; }
+.sync-refresh svg { width: 15px; height: 15px; }
+.sync-refresh:active { opacity: 0.55; }
 .chart-head-reset { margin-left: auto; flex: 0 0 auto; min-height: 32px; }
 
 [data-theme='blue'] { --accent: #5B8DBE; --accent-soft: rgba(91, 141, 190, 0.12); }

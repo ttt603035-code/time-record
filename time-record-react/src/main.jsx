@@ -9,6 +9,15 @@ import './styles.css';
 
 import App from './App.jsx';
 
+let lastTap = 0;
+document.addEventListener('touchend', (e) => {
+  const now = Date.now();
+  if (now - lastTap < 350 && !e.target.closest('button, a, input, textarea, label, [role="button"]')) {
+    e.preventDefault();
+  }
+  lastTap = now;
+}, { passive: false });
+
 createRoot(document.getElementById('root')).render(
   <StrictMode>
     <App />

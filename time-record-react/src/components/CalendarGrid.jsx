@@ -1,6 +1,6 @@
 import { useEffect, useRef } from 'react';
 
-import { EVENT_COLORS } from '@/lib/constants.js';
+import { resolveColor } from '@/lib/constants.js';
 import { daysInMonth, isoDate, parseISO, todayISO } from '@/lib/date.js';
 import { el } from '@/lib/dom.js';
 import { monthName, weekdayName } from '@/lib/i18n.js';
@@ -96,7 +96,7 @@ export function CalendarGrid({
       const colors = [...new Set(evs.map((e) => e.color))].slice(0, 3);
       colors.forEach((col) => {
         const dot = el('i');
-        dot.style.setProperty('--dot', EVENT_COLORS[col] || EVENT_COLORS.blue);
+        dot.style.setProperty('--dot', resolveColor(col));
         dots.appendChild(dot);
       });
       btn.appendChild(dots);

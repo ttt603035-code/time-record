@@ -1,6 +1,6 @@
 import { useEffect, useRef } from 'react';
 
-import { EVENT_COLORS } from '@/lib/constants.js';
+import { resolveColor } from '@/lib/constants.js';
 import { pad2, toMinutes } from '@/lib/date.js';
 import { el, hexToRgba } from '@/lib/dom.js';
 
@@ -49,7 +49,7 @@ function buildDayTimeline(events, nowMin, onBlockClick) {
       const height = Math.max(18, b.d * pxPerMin);
       const left = (li / n) * 100;
       const width = (100 / n) - 0.8;
-      const color = EVENT_COLORS[b.e.color] || EVENT_COLORS.blue;
+      const color = resolveColor(b.e.color);
       const block = el('button', 'timeline-block');
       block.type = 'button';
       block.setAttribute('aria-label', b.e.title + ', ' + b.e.startTime + '–' + b.e.endTime);

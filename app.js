@@ -36,8 +36,50 @@ const EVENT_COLORS = {
   pink: '#F0A3B6',
   green: '#86C79B',
   orange: '#F1B973',
+  red: '#E58B84',
+  yellow: '#E8C468',
+  mint: '#7FCFC4',
+  teal: '#7BBFD4',
+  cyan: '#84C2E8',
+  indigo: '#8E93D8',
+  brown: '#C0A188',
+  gray: '#A9A9AF',
 };
-const COLOR_ORDER = ['blue', 'purple', 'pink', 'green', 'orange'];
+const COLOR_ORDER = [
+  'blue', 'cyan', 'teal', 'mint', 'green',
+  'yellow', 'orange', 'red', 'pink', 'purple',
+  'indigo', 'brown', 'gray',
+];
+const HEX_COLOR = /^#[0-9A-Fa-f]{6}$/;
+function resolveColor(c) {
+  if (EVENT_COLORS[c]) return EVENT_COLORS[c];
+  if (typeof c === 'string' && HEX_COLOR.test(c)) return c.toUpperCase();
+  return EVENT_COLORS.blue;
+}
+function normalizeColorValue(c) {
+  if (EVENT_COLORS[c]) return c;
+  if (typeof c === 'string' && HEX_COLOR.test(c)) return c.toUpperCase();
+  return 'blue';
+}
+
+function appendNativeColorSwatch(swatches, draft, setSwatchColor) {
+  const wrap = el('label', 'swatch swatch-custom');
+  wrap.setAttribute('aria-label', t('pickColor'));
+  const customOn = HEX_COLOR.test(draft.color);
+  wrap.dataset.color = customOn ? draft.color : '__custom__';
+  if (customOn) wrap.classList.add('is-selected');
+  wrap.setAttribute('aria-pressed', String(customOn));
+  const input = document.createElement('input');
+  input.type = 'color';
+  input.value = resolveColor(draft.color);
+  input.addEventListener('input', () => {
+    draft.color = normalizeColorValue(input.value);
+    wrap.dataset.color = draft.color;
+    setSwatchColor(draft.color);
+  });
+  wrap.appendChild(input);
+  swatches.appendChild(wrap);
+}
 
 const ITEM_H = 40; // wheel picker item height (px)
 
@@ -68,6 +110,7 @@ const I18N = {
     themeGraphite: 'Graphite', themeBlue: 'Blue', themeSage: 'Sage',
     themeClay: 'Clay', themeLavender: 'Lavender', themeRose: 'Rose',
     sync: 'Sync', refresh: 'Refresh',
+    pickColor: 'More colours',
     english: 'English', chinese: '中文',
     cancel: 'Cancel', done: 'Done', save: 'Save', add: 'Add', delete: 'Delete', clear: 'Clear',
     addEvent: 'Add Event', newEvent: 'New Event', editEvent: 'Edit Event',
@@ -121,6 +164,7 @@ const I18N = {
     themeGraphite: '石墨', themeBlue: '雾蓝', themeSage: '鼠尾草',
     themeClay: '陶土', themeLavender: '薰衣草', themeRose: '玫瑰',
     sync: '同步', refresh: '刷新',
+    pickColor: '更多颜色',
     english: 'English', chinese: '中文',
     cancel: '取消', done: '完成', save: '保存', add: '添加', delete: '删除', clear: '清空',
     addEvent: '添加日程', newEvent: '新建日程', editEvent: '编辑日程',
@@ -281,7 +325,7 @@ function normalizeEvent(e) {
     endTime: validTime(e.endTime) ? e.endTime : '10:00',
     title: (typeof e.title === 'string' && e.title.trim()) ? e.title.trim() : 'Untitled',
     category: typeof e.category === 'string' ? e.category : '',
-    color: EVENT_COLORS[e.color] ? e.color : 'blue',
+    color: normalizeColorValue(e.color),
     note: typeof e.note === 'string' ? e.note : '',
     createdAt: typeof e.createdAt === 'string' ? e.createdAt : now,
     updatedAt: typeof e.updatedAt === 'string' ? e.updatedAt : now,
@@ -316,7 +360,7 @@ function normalizeCategory(c) {
   return {
     id: (typeof c.id === 'string' && c.id) ? c.id : 'cat_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6),
     name: (typeof c.name === 'string' && c.name.trim()) ? c.name.trim() : 'Untitled',
-    color: EVENT_COLORS[c.color] ? c.color : 'blue',
+    color: normalizeColorValue(c.color),
   };
 }
 
@@ -1196,7 +1240,7 @@ function renderCalendarGrid() {
     const colors = [...new Set(evs.map((e) => e.color))].slice(0, 3);
     colors.forEach((col) => {
       const dot = el('i');
-      dot.style.setProperty('--dot', EVENT_COLORS[col] || EVENT_COLORS.blue);
+      dot.style.setProperty('--dot', resolveColor(col));
       dots.appendChild(dot);
     });
     btn.appendChild(dots);
@@ -1358,7 +1402,7 @@ function eventCard(e) {
   btn.setAttribute('aria-label', e.title + ', ' + e.startTime + ' to ' + e.endTime + (e.category ? ', ' + e.category : ''));
 
   const accent = el('span', 'event-accent');
-  accent.style.setProperty('--c', EVENT_COLORS[e.color] || EVENT_COLORS.blue);
+  accent.style.setProperty('--c', resolveColor(e.color));
 
   const time = el('span', 'event-time');
   time.appendChild(el('span', 't-start', e.startTime));
@@ -1739,7 +1783,7 @@ function buildTemplatesListBody() {
       const row = el('button', 'tpl-row');
       row.type = 'button';
       const dot = el('span', 'tpl-dot');
-      dot.style.setProperty('--c', EVENT_COLORS[cat.color] || EVENT_COLORS.blue);
+      dot.style.setProperty('--c', resolveColor(cat.color));
       const name = el('span', 'tpl-name', cat.name);
       const n = state.events.filter((e) => (e.category || '') === cat.name).length;
       const cnt = el('span', 'tpl-count', n ? (n === 1 ? t('oneEventUsed') : t('eventsUsed', { n: n })) : '');
@@ -1808,6 +1852,7 @@ function showTemplateForm(cat) {
     s.addEventListener('click', () => { draft.color = c; setSwatchColor(c); });
     swatches.appendChild(s);
   });
+  appendNativeColorSwatch(swatches, draft, setSwatchColor);
   colorField.appendChild(swatches);
   body.appendChild(colorField);
 
@@ -2141,7 +2186,7 @@ function openEventSheet(eventId, opts) {
       const pill = el('button', 'tpl-chip');
       pill.type = 'button';
       const dot = el('span', 'tpl-chip-dot');
-      dot.style.setProperty('--c', EVENT_COLORS[cat.color] || EVENT_COLORS.blue);
+      dot.style.setProperty('--c', resolveColor(cat.color));
       pill.appendChild(dot);
       pill.appendChild(el('span', '', cat.name));
       if (draft.category === cat.name) pill.classList.add('is-active');
@@ -2199,6 +2244,7 @@ function openEventSheet(eventId, opts) {
     });
     swatches.appendChild(s);
   });
+  appendNativeColorSwatch(swatches, draft, setSwatchColor);
   colorField.appendChild(swatches);
   body.appendChild(colorField);
 
@@ -2412,8 +2458,8 @@ function shiftInsights(dir) {
 
 function catColorOf(name, eColor) {
   const cat = state.categories.find((c) => c.name === name);
-  if (cat) return EVENT_COLORS[cat.color] || EVENT_COLORS.blue;
-  return EVENT_COLORS[eColor] || '#D1D1D6';
+  if (cat) return resolveColor(cat.color);
+  return resolveColor(eColor);
 }
 
 function uncategorizedName() {
@@ -3042,7 +3088,7 @@ function buildDayTimeline(events, nowMin, onBlockClick) {
       const height = Math.max(18, b.d * pxPerMin);
       const left = (li / n) * 100;
       const width = (100 / n) - 0.8;
-      const color = EVENT_COLORS[b.e.color] || EVENT_COLORS.blue;
+      const color = resolveColor(b.e.color);
       const block = el('button', 'timeline-block');
       block.type = 'button';
       block.setAttribute('aria-label', b.e.title + ', ' + b.e.startTime + '–' + b.e.endTime);
@@ -3630,6 +3676,17 @@ function wireNavigation() {
   });
 }
 
+function preventDoubleTapZoom() {
+  let last = 0;
+  document.addEventListener('touchend', (e) => {
+    const now = Date.now();
+    if (now - last < 350 && !e.target.closest('button, a, input, textarea, label, [role="button"]')) {
+      e.preventDefault();
+    }
+    last = now;
+  }, { passive: false });
+}
+
 function wireImportFile() {
   document.getElementById('importFile').addEventListener('change', async (e) => {
     const file = e.target.files && e.target.files[0];
@@ -3661,6 +3718,7 @@ async function init() {
 
   buildWeekdayHeader();
   wireNavigation();
+  preventDoubleTapZoom();
   wireImportFile();
   enableSwipe();
 

@@ -1,4 +1,4 @@
-import { EVENT_COLORS } from '@/lib/constants.js';
+import { resolveColor } from '@/lib/constants.js';
 
 /** A single event row in the day detail list. Markup matches the legacy DOM. */
 export function EventCard({ event, onClick }) {
@@ -14,7 +14,7 @@ export function EventCard({ event, onClick }) {
     >
       <span
         className="event-accent"
-        style={{ '--c': EVENT_COLORS[e.color] || EVENT_COLORS.blue }}
+        style={{ '--c': resolveColor(e.color) }}
       />
       <span className="event-time">
         <span className="t-start">{e.startTime}</span>
