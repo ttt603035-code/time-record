@@ -301,8 +301,8 @@ await tick(500);
 check('More screen mounts', !!$(doc, '#screen-more'));
 // Phase 2: the More screen is React + shadcn (Card / Separator / Collapsible),
 // so structure is identified by data-slot rather than legacy class names.
-check('Data / Appearance / Language / About cards',
-  $$(doc, '[data-slot="card"]').length === 4,
+check('Data / Cloud Sync / Appearance / Language / About cards',
+  $$(doc, '[data-slot="card"]').length === 5,
   `${$$(doc, '[data-slot="card"]').length} cards`);
 check('Data stat tiles', $$(doc, '[data-slot="card-content"] .grid-cols-3 > div').length === 3);
 const dataActions = $$(doc, '[data-slot="card-content"] [data-slot="button"]');

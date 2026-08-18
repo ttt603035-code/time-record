@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 
 import { openImportGuide } from '@/components/ImportGuideModal.jsx';
+import { openSyncSettings } from '@/components/SyncSettingsModal.jsx';
 import { useAlertDialog } from '@/hooks/useAlertDialog.jsx';
 import { THEMES } from '@/lib/themes.js';
 import { openTemplatesModal } from '@/components/TemplatesModal.jsx';
@@ -20,6 +21,8 @@ import { getLang, t } from '@/lib/i18n.js';
 import { toast } from '@/lib/overlays.js';
 import { importPayload } from '@/lib/shortcut-import.js';
 import { StorageService } from '@/lib/storage.js';
+import { isConfigured, loadConfig, syncNow } from '@/lib/supabase-sync.js';
+import { maskKey } from '@/lib/sync-core.js';
 import { formatBytes } from '@/lib/analytics.js';
 import { cn } from '@/lib/utils.js';
 
@@ -86,6 +89,9 @@ export function MorePage({
 }) {
   const fileInputRef = useRef(null);
   const [keysOpen, setKeysOpen] = useState(false);
+  const [syncOn, setSyncOn] = useState(() => isConfigured());
+  const [syncBusy, setSyncBusy] = useState(false);
+  const [syncedAt, setSyncedAt] = useState(null);
   const { showDialog, dialog } = useAlertDialog();
   // Always hand the modals the freshest data without rebuilding them.
   const dataRef = useRef({ events, categories });
@@ -193,6 +199,43 @@ export function MorePage({
     });
   };
 
+  /* ── Cloud sync ──
+     Pulls remote rows, merges last-write-wins, pushes what is missing, then
+     hands the merged list to the app through the normal import path so the
+     UI refreshes exactly as it does for a file import. */
+  const runSync = async () => {
+    if (syncBusy) return;
+    setSyncBusy(true);
+    try {
+      const local = await DataService.exportAll();
+      const res = await syncNow(local, loadConfig());
+      if (!res.ok) {
+        toast(t(res.code));
+        return;
+      }
+      if (res.pulled > 0) {
+        await DataService.importAll(res.merged);
+        await onImported?.();
+      }
+      setSyncedAt(res.syncedAt);
+      toast(res.pushed || res.pulled
+        ? t('syncDone', { u: res.pushed, d: res.pulled })
+        : t('syncNoChanges'));
+    } finally {
+      setSyncBusy(false);
+    }
+  };
+
+  const syncStatusLine = () => {
+    if (!syncOn) return t('syncDesc');
+    const cfg = loadConfig();
+    const where = cfg ? cfg.url.replace(/^https:\/\//, '') : '';
+    const when = syncedAt
+      ? t('syncLast', { s: new Date(syncedAt).toLocaleTimeString() })
+      : t('syncNever');
+    return `${where} · ${when}`;
+  };
+
   const storageRows = useMemo(() => {
     const rows = [
       { key: STORAGE_KEY, entries: events.length, size: estimatedSize },
@@ -298,6 +341,57 @@ export function MorePage({
                 ))}
               </CollapsibleContent>
             </Collapsible>
+          </CardContent>
+        </Card>
+
+        {/* ── Cloud Sync */}
+        <Card className="gap-4 py-4">
+          <CardHeader className="gap-1 px-4">
+            <CardTitle className="flex items-center gap-2 text-[15px] font-bold tracking-tight">
+              {t('sync')}
+              <span
+                className={cn(
+                  'rounded-full px-2 py-0.5 text-[10px] font-extrabold tracking-[0.04em] uppercase',
+                  syncOn
+                    ? 'bg-emerald-500/15 text-emerald-700'
+                    : 'bg-secondary text-muted-foreground',
+                )}
+              >
+                {syncOn ? t('syncOn') : t('syncOff')}
+              </span>
+            </CardTitle>
+            <CardDescription className="text-xs leading-relaxed">
+              {syncStatusLine()}
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="flex flex-wrap gap-2 px-4">
+            {syncOn ? (
+              <>
+                <PillButton
+                  label={syncBusy ? t('syncing') : t('syncNow')}
+                  icon={I.sync}
+                  variant="default"
+                  onClick={runSync}
+                />
+                <PillButton
+                  label={t('syncSettings')}
+                  onClick={() => openSyncSettings({
+                    onSaved: () => setSyncOn(true),
+                    onDisconnected: () => { setSyncOn(false); setSyncedAt(null); },
+                  })}
+                />
+              </>
+            ) : (
+              <PillButton
+                label={t('syncSetUp')}
+                icon={I.cloud}
+                variant="default"
+                onClick={() => openSyncSettings({
+                  onSaved: () => setSyncOn(true),
+                  onDisconnected: () => { setSyncOn(false); setSyncedAt(null); },
+                })}
+              />
+            )}
           </CardContent>
         </Card>
 
