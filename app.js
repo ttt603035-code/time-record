@@ -1513,8 +1513,7 @@ function renderMoreScreen() {
   const groups = document.getElementById('moreGroups');
   groups.innerHTML = '';
 
-  const syncLabel = document.getElementById('syncChipLabel');
-  if (syncLabel) syncLabel.textContent = t('sync') + ' · ' + formatSyncClock(lastSyncAt);
+  updateSyncLabels();
 
   if (!StorageService.available) {
     const notice = el('div', 'storage-notice is-visible');
@@ -1646,6 +1645,17 @@ function applyStaticTranslations() {
   });
   const btn = document.getElementById('btnTodayTop');
   if (btn) btn.textContent = t('today');
+  updateSyncLabels();
+}
+
+function updateSyncLabels() {
+  const text = t('sync') + ' · ' + formatSyncClock(lastSyncAt);
+  document.querySelectorAll('.sync-chip-label').forEach((node) => {
+    node.textContent = text;
+  });
+  document.querySelectorAll('.sync-refresh').forEach((node) => {
+    node.setAttribute('aria-label', t('refresh'));
+  });
 }
 
 function storageKeysBlock() {
@@ -3010,7 +3020,6 @@ function buildDayTimeline(events, nowMin, onBlockClick) {
   for (let h = 0; h <= 24; h++) {
     const line = el('div', 'timeline-hour');
     line.style.top = (h / 24 * H) + 'px';
-    if (h % 3 === 0) line.style.background = 'rgba(60,60,67,0.16)';
     canvas.appendChild(line);
   }
 
@@ -3385,8 +3394,6 @@ function renderInsights(dir) {
 
   body.innerHTML = '';
   const view = el('div', 'insights-view');
-  if (dir === 'push') view.classList.add('view-push');
-  else if (dir === 'pop') view.classList.add('view-pop');
   body.appendChild(view);
 
   const { level, category, task } = analytics.route;
@@ -3550,6 +3557,7 @@ function refreshAll() {
 
 async function refreshEvents() {
   state.events = await DataService.fetchAll();
+  lastSyncAt = Date.now();
 }
 
 async function refreshCategories() {
@@ -3612,14 +3620,14 @@ function wireNavigation() {
   document.getElementById('btnAddDay').addEventListener('click', () => openEventSheet(null));
   document.getElementById('btnAddToday').addEventListener('click', () => openEventSheet(null, { date: todayISO() }));
   document.getElementById('insightsBack').addEventListener('click', analyticsBack);
-  const btnRefresh = document.getElementById('btnRefresh');
-  if (btnRefresh) {
-    btnRefresh.addEventListener('click', async () => {
+  document.querySelectorAll('.sync-refresh').forEach((btn) => {
+    btn.addEventListener('click', async () => {
       await refreshEvents();
       await refreshCategories();
+      lastSyncAt = Date.now();
       refreshAll();
     });
-  }
+  });
 }
 
 function wireImportFile() {

@@ -27,7 +27,6 @@ function buildDayTimeline(events, nowMin, onBlockClick) {
   for (let h = 0; h <= 24; h++) {
     const line = el('div', 'timeline-hour');
     line.style.top = (h / 24 * H) + 'px';
-    if (h % 3 === 0) line.style.background = 'rgba(60,60,67,0.16)';
     canvas.appendChild(line);
   }
 

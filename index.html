@@ -21,7 +21,15 @@
 
       <header class="topbar">
         <h1 class="page-title" data-i18n="calendar">Calendar</h1>
-        <button class="today-link" id="btnTodayTop" type="button" data-i18n="today">Today</button>
+        <div class="topbar-end">
+          <div class="sync-actions">
+            <span class="chip sync-chip"><span class="sync-chip-label">Sync · 00:00</span></span>
+            <button class="sync-refresh" type="button" aria-label="Refresh">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12a9 9 0 1 1-9-9c2.52 0 4.93 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/></svg>
+            </button>
+          </div>
+          <button class="today-link" id="btnTodayTop" type="button" data-i18n="today">Today</button>
+        </div>
       </header>
 
       <div class="month-nav" role="group" aria-label="Month navigation">
@@ -60,9 +68,17 @@
     <main class="screen" id="screen-today" aria-label="Today" hidden>
       <header class="topbar">
         <h1 class="page-title" data-i18n="today">Today</h1>
-        <button class="add-btn" id="btnAddToday" type="button" aria-label="Add event for today">
-          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/></svg>
-        </button>
+        <div class="topbar-end">
+          <div class="sync-actions">
+            <span class="chip sync-chip"><span class="sync-chip-label">Sync · 00:00</span></span>
+            <button class="sync-refresh" type="button" aria-label="Refresh">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12a9 9 0 1 1-9-9c2.52 0 4.93 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/></svg>
+            </button>
+          </div>
+          <button class="add-btn" id="btnAddToday" type="button" aria-label="Add event for today">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/></svg>
+          </button>
+        </div>
       </header>
 
       <div class="today-hero">
@@ -77,6 +93,14 @@
     <main class="screen" id="screen-insights" aria-label="Insights" hidden>
       <header class="topbar">
         <h1 class="page-title" data-i18n="insights">Insights</h1>
+        <div class="topbar-end">
+          <div class="sync-actions">
+            <span class="chip sync-chip"><span class="sync-chip-label">Sync · 00:00</span></span>
+            <button class="sync-refresh" type="button" aria-label="Refresh">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12a9 9 0 1 1-9-9c2.52 0 4.93 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/></svg>
+            </button>
+          </div>
+        </div>
       </header>
 
       <!-- Drill-down navigation: Overview → Category → Task -->

@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 
 import { openImportGuide } from '@/components/ImportGuideModal.jsx';
 import { useAlertDialog } from '@/hooks/useAlertDialog.jsx';
+import { SyncActions } from '@/components/SyncActions.jsx';
 import { THEMES } from '@/lib/themes.js';
 import { openTemplatesModal } from '@/components/TemplatesModal.jsx';
 import { Button } from '@/components/ui/button.jsx';
@@ -78,11 +79,6 @@ function SettingsRow({ icon, label, value, onClick }) {
       <Icon className="size-3.5 shrink-0 text-muted-foreground opacity-70" svg={I.chevR} />
     </button>
   );
-}
-
-function formatSyncClock(ms) {
-  const n = new Date(ms || Date.now());
-  return String(n.getHours()).padStart(2, '0') + ':' + String(n.getMinutes()).padStart(2, '0');
 }
 
 export function MorePage({
@@ -216,19 +212,8 @@ export function MorePage({
     <main className="screen is-active" id="screen-more" aria-label="More">
       <header className="topbar">
         <h1 className="page-title">{t('more')}</h1>
-        <div className="sync-actions">
-          <span className="chip sync-chip">{t('sync')} · {formatSyncClock(lastSyncAt)}</span>
-          <button
-            className="icon-btn sync-refresh"
-            type="button"
-            aria-label={t('refresh')}
-            onClick={onRefresh}
-          >
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-              <path d="M21 12a9 9 0 1 1-9-9c2.52 0 4.93 1 6.74 2.74L21 8" />
-              <path d="M21 3v5h-5" />
-            </svg>
-          </button>
+        <div className="topbar-end">
+          <SyncActions lastSyncAt={lastSyncAt} onRefresh={onRefresh} />
         </div>
       </header>
 

@@ -133,6 +133,8 @@ export default function App() {
           onGoToday={handleGoToday}
           onAddEvent={handleAddEvent}
           onEditEvent={handleEditEvent}
+          lastSyncAt={lastSyncAt}
+          onRefresh={refreshAfterImport}
         />
       ) : null}
 
@@ -141,6 +143,8 @@ export default function App() {
           events={events}
           onAddEvent={handleAddEvent}
           onEditEvent={handleEditEvent}
+          lastSyncAt={lastSyncAt}
+          onRefresh={refreshAfterImport}
         />
       ) : null}
 
@@ -161,6 +165,8 @@ export default function App() {
             onGo={analytics.go}
             onBack={analytics.back}
             onEditEvent={handleEditEvent}
+            lastSyncAt={lastSyncAt}
+            onRefresh={refreshAfterImport}
           />
         </Suspense>
       ) : null}

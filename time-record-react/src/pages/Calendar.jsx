@@ -6,6 +6,7 @@ import { EmptyState } from '@/components/EmptyState.jsx';
 import { MonthSelectorSheet } from '@/components/MonthSelectorSheet.jsx';
 import { MONTHS_LONG } from '@/lib/constants.js';
 import { todayISO } from '@/lib/date.js';
+import { SyncActions } from '@/components/SyncActions.jsx';
 import { formatDayLabel, getLang, t } from '@/lib/i18n.js';
 
 export function CalendarPage({
@@ -20,6 +21,8 @@ export function CalendarPage({
   onGoToday,
   onAddEvent,
   onEditEvent,
+  lastSyncAt,
+  onRefresh,
 }) {
   const [pickerOpen, setPickerOpen] = useState(false);
 
@@ -41,14 +44,17 @@ export function CalendarPage({
     <main className="screen is-active" id="screen-calendar" aria-label="Calendar">
       <header className="topbar">
         <h1 className="page-title">{t('calendar')}</h1>
-        <button
-          className={`today-link${onToday ? ' is-muted' : ''}`}
-          id="btnTodayTop"
-          type="button"
-          onClick={onGoToday}
-        >
-          {t('today')}
-        </button>
+        <div className="topbar-end">
+          <SyncActions lastSyncAt={lastSyncAt} onRefresh={onRefresh} />
+          <button
+            className={`today-link${onToday ? ' is-muted' : ''}`}
+            id="btnTodayTop"
+            type="button"
+            onClick={onGoToday}
+          >
+            {t('today')}
+          </button>
+        </div>
       </header>
 
       <div className="month-nav" role="group" aria-label="Month navigation">
