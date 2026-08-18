@@ -3595,6 +3595,7 @@ function updateMonthTitle() {
 
 function updateTodayButton() {
   const btn = document.getElementById('btnTodayTop');
+  if (!btn) return;
   const n = new Date();
   const onToday = state.viewYear === n.getFullYear() &&
     state.viewMonth === n.getMonth() &&
@@ -3677,7 +3678,8 @@ function wireNavigation() {
   document.getElementById('monthNavPrev').addEventListener('click', prevMonth);
   document.getElementById('monthNavNext').addEventListener('click', nextMonth);
   document.getElementById('monthTitleBtn').addEventListener('click', openMonthSelector);
-  document.getElementById('btnTodayTop').addEventListener('click', goToToday);
+  const todayTop = document.getElementById('btnTodayTop');
+  if (todayTop) todayTop.addEventListener('click', goToToday);
   document.getElementById('btnAddDay').addEventListener('click', () => openEventSheet(null));
   document.getElementById('btnAddToday').addEventListener('click', () => openEventSheet(null, { date: todayISO() }));
   document.getElementById('insightsBack').addEventListener('click', analyticsBack);

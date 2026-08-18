@@ -1973,15 +1973,25 @@ textarea.text-input { resize: none; line-height: 1.45; }
 .topbar-end { display: flex; align-items: center; gap: 8px; flex: 0 0 auto; }
 .sync-actions { display: flex; align-items: center; gap: 6px; }
 .sync-chip { font-variant-numeric: tabular-nums; }
-.sync-refresh {
+button.chip.sync-refresh {
   width: auto;
   height: auto;
   min-width: 0;
+  min-height: 30px;
   flex: 0 0 auto;
   white-space: nowrap;
+  gap: 6px;
+  padding: 6px 12px;
+  border: 1px solid rgba(60, 60, 67, 0.18);
+  border-radius: var(--radius-pill);
+  background: var(--surface);
+  color: var(--text);
+  font-size: 12.5px;
+  font-weight: 600;
+  box-shadow: none;
 }
-.sync-refresh svg { width: 14px; height: 14px; }
-.sync-refresh:active { opacity: 0.55; }
+button.chip.sync-refresh svg { width: 14px; height: 14px; }
+button.chip.sync-refresh:active { opacity: 0.55; }
 .chart-head-reset { margin-left: auto; flex: 0 0 auto; min-height: 32px; }
 
 [data-theme='blue'] { --accent: #5B8DBE; --accent-soft: rgba(91, 141, 190, 0.12); }

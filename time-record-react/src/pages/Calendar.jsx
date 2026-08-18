@@ -18,7 +18,6 @@ export function CalendarPage({
   onSelectDate,
   onChangeMonth,
   onSetMonth,
-  onGoToday,
   onAddEvent,
   onEditEvent,
   lastSyncAt,
@@ -35,25 +34,12 @@ export function CalendarPage({
     return list.sort((a, b) => (a.startTime < b.startTime ? -1 : 1));
   }, [events, selectedDate]);
 
-  const now = new Date();
-  const onToday = viewYear === now.getFullYear()
-    && viewMonth === now.getMonth()
-    && selectedDate === todayISO();
-
   return (
     <main className="screen is-active" id="screen-calendar" aria-label="Calendar">
       <header className="topbar">
         <h1 className="page-title">{t('calendar')}</h1>
         <div className="topbar-end">
           <SyncActions lastSyncAt={lastSyncAt} onRefresh={onRefresh} />
-          <button
-            className={`today-link${onToday ? ' is-muted' : ''}`}
-            id="btnTodayTop"
-            type="button"
-            onClick={onGoToday}
-          >
-            {t('today')}
-          </button>
         </div>
       </header>
 

@@ -96,14 +96,6 @@ export default function App() {
     setViewMonth(m);
   }, []);
 
-  const handleGoToday = useCallback(() => {
-    const n = new Date();
-    setViewYear(n.getFullYear());
-    setViewMonth(n.getMonth());
-    setSelectedDate(todayISO());
-    setTab('calendar');
-  }, []);
-
   /* ── Tab switching ── */
   const handleTab = useCallback((next) => {
     // Tapping the active Insights tab again pops the drill-down back to the
@@ -130,7 +122,6 @@ export default function App() {
           onSelectDate={handleSelectDate}
           onChangeMonth={handleChangeMonth}
           onSetMonth={handleSetMonth}
-          onGoToday={handleGoToday}
           onAddEvent={handleAddEvent}
           onEditEvent={handleEditEvent}
           lastSyncAt={lastSyncAt}
