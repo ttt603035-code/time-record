@@ -19,8 +19,16 @@ import { openStudyModal } from '@/lib/overlays.js';
 import { cn } from '@/lib/utils.js';
 
 /** The Text action body, one JSON object per calendar event. */
-const TEXT_ACTION = `{"id":"cal_[Calendar Event]","date":"[Start Date]",
-"startTime":"[Start Date]","endTime":"[End Date]",
+/**
+ * One JSON object per event.
+ *
+ * `id` is what makes re-running safe, so it has to differ per event. Building
+ * it from the date plus the title is the practical choice: both are ordinary
+ * magic variables you can pick straight from the list, whereas the event's
+ * real identifier is buried behind a long-press on the variable.
+ */
+const TEXT_ACTION = `{"id":"cal_[Formatted Date]_[Title]","date":"[Formatted Date]",
+"startTime":"[Formatted Start Time]","endTime":"[Formatted End Time]",
 "title":"[Title]","category":"[Calendar]","note":""}`;
 
 const WRAP_ACTION = '[[Combined Text]]';
@@ -158,6 +166,10 @@ function ImportGuide() {
                     <code className="font-mono">startTime</code>,{' '}
                     <code className="font-mono">endTime</code> — {t('guideFormatTime')}
                   </span>
+                </li>
+                <li className="flex gap-2 text-[12.5px] text-muted-foreground">
+                  <span aria-hidden="true" className="text-foreground">·</span>
+                  <span><code className="font-mono">id</code> — {t('guideFormatId')}</span>
                 </li>
               </ul>
               <p className="mt-2 text-[12px] leading-relaxed text-destructive">
