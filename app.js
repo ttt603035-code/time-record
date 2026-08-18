@@ -62,6 +62,35 @@ const I18N = {
     eventTemplates: 'Event Templates', templatesDefined: '%n defined',
     storage: 'Storage', onThisDevice: 'On this device', limitedPreview: 'Limited (preview)',
     aboutCalendar: 'About Calendar', version: 'v1.0',
+    sync: 'Cloud Sync',
+    syncDesc: 'Optionally mirror your events to your own Supabase project.',
+    syncOff: 'Off', syncOn: 'On', syncSetUp: 'Set up', syncSettings: 'Settings',
+    syncNow: 'Sync now', syncing: 'Syncing…', syncNever: 'Never synced',
+    syncJustNow: 'just now', syncMinsAgo: '%n min ago', syncHrsAgo: '%n h ago',
+    syncYesterday: 'yesterday', syncNotSynced: 'Not synced',
+    syncLast: 'Last synced %s', syncDisconnect: 'Disconnect',
+    syncUrl: 'Project URL', syncAnonKey: 'Anon key', syncUserKey: 'Passphrase',
+    syncUrlHint: 'Settings \u2192 Data API \u2192 Project URL',
+    syncAnonKeyHint: 'Settings \u2192 API Keys \u2192 anon public',
+    syncUserKeyHint: 'Any long, private phrase. Use the SAME one on every device.',
+    syncTest: 'Test connection', syncTesting: 'Testing…',
+    syncOkFound: 'Connected — %n events in the cloud',
+    syncSaved: 'Cloud sync connected',
+    syncDone: 'Synced — %u up, %d down',
+    syncNoChanges: 'Synced — already up to date',
+    syncDisconnected: 'Cloud sync disconnected',
+    syncSetupSql: 'Create the table',
+    syncSetupSqlDesc: 'Run this once in your Supabase SQL editor before the first sync.',
+    syncSecurityNote: 'The anon key is public by design. Anyone who has it can read this table, so use a project you own and keep nothing sensitive here.',
+    syncErrUrlEmpty: 'Enter your project URL',
+    syncErrUrlShape: 'That does not look like a https://… URL',
+    syncErrKeyEmpty: 'Enter your anon key',
+    syncErrUserEmpty: 'Enter a passphrase',
+    syncErrNetwork: 'Could not reach the server — check the URL and your connection',
+    syncErrNoTable: 'Table "events" not found — run the setup SQL first',
+    syncErrRls: 'Blocked by row-level security — check the table policy',
+    syncErrAuth: 'The anon key was rejected',
+    syncErrUnknown: 'Sync failed',
     language: 'Language', languageDesc: 'Switch the interface language.',
     english: 'English', chinese: '中文',
     cancel: 'Cancel', done: 'Done', save: 'Save', add: 'Add', delete: 'Delete', clear: 'Clear',
@@ -110,6 +139,35 @@ const I18N = {
     eventTemplates: '日程模板', templatesDefined: '已定义 %n 个',
     storage: '存储', onThisDevice: '此设备', limitedPreview: '受限（预览）',
     aboutCalendar: '关于 Calendar', version: 'v1.0',
+    sync: '云同步',
+    syncDesc: '可选：把日程同步到你自己的 Supabase 项目。',
+    syncOff: '未开启', syncOn: '已连接', syncSetUp: '设置', syncSettings: '设置',
+    syncNow: '立即同步', syncing: '同步中…', syncNever: '尚未同步',
+    syncJustNow: '刚刚', syncMinsAgo: '%n 分钟前', syncHrsAgo: '%n 小时前',
+    syncYesterday: '昨天', syncNotSynced: '未同步',
+    syncLast: '上次同步 %s', syncDisconnect: '断开连接',
+    syncUrl: '项目 URL', syncAnonKey: 'Anon key', syncUserKey: '同步口令',
+    syncUrlHint: 'Settings \u2192 Data API \u2192 Project URL',
+    syncAnonKeyHint: 'Settings \u2192 API Keys \u2192 anon public',
+    syncUserKeyHint: '任意一段私密长字符串。每台设备必须填相同的。',
+    syncTest: '测试连接', syncTesting: '测试中…',
+    syncOkFound: '连接成功 — 云端有 %n 条日程',
+    syncSaved: '云同步已连接',
+    syncDone: '同步完成 — 上传 %u 条，下载 %d 条',
+    syncNoChanges: '同步完成 — 已是最新',
+    syncDisconnected: '已断开云同步',
+    syncSetupSql: '创建数据表',
+    syncSetupSqlDesc: '首次同步前，在 Supabase 的 SQL Editor 里执行一次。',
+    syncSecurityNote: 'Anon key 本身就是公开的，拿到它的人都能读这张表。请使用你自己的项目，不要存放敏感内容。',
+    syncErrUrlEmpty: '请填写项目 URL',
+    syncErrUrlShape: '这看起来不像 https://… 开头的 URL',
+    syncErrKeyEmpty: '请填写 anon key',
+    syncErrUserEmpty: '请填写同步口令',
+    syncErrNetwork: '无法连接服务器 — 请检查 URL 和网络',
+    syncErrNoTable: '找不到 events 表 — 请先执行建表 SQL',
+    syncErrRls: '被行级安全策略拦截 — 请检查表的 policy',
+    syncErrAuth: 'Anon key 被拒绝',
+    syncErrUnknown: '同步失败',
     language: '语言', languageDesc: '切换界面语言。',
     english: 'English', chinese: '中文',
     cancel: '取消', done: '完成', save: '保存', add: '添加', delete: '删除', clear: '清空',
@@ -431,7 +489,14 @@ const StorageService = (() => {
 
   async function clearAll() {
     memoryEvents = [];
-    if (ls) { try { ls.removeItem(KEY); } catch (err) { /* ignore */ } }
+    wasFresh = false;
+    // Write an empty record instead of removing the key: removal would make the
+    // next launch look like a fresh install and re-trigger the demo seed, which
+    // would hand back exactly the data the user just cleared.
+    if (ls) {
+      try { ls.setItem(KEY, JSON.stringify({ version: 1, events: [] })); }
+      catch (err) { /* ignore */ }
+    }
     return true;
   }
 
@@ -543,6 +608,330 @@ const DataService = {
 };
 
 /* ============================================================
+   5b. CLOUD SYNC  (optional Supabase mirror)
+   ------------------------------------------------------------
+   Mirrors the React implementation in time-record-react/src/lib/
+   {sync-core,supabase-sync}.js — same table, same columns, same
+   last-write-wins rule, so the two front-ends can sync with each
+   other through the same project.
+
+   The SDK is loaded from a CDN on first use only. This build has
+   no bundler, and a user who never opens the sync sheet should
+   never pay for the download.
+   ============================================================ */
+
+const SYNC_KEY = 'calendar_sync_v1';
+const SYNC_TABLE = 'events';
+const SUPABASE_CDN = 'https://esm.sh/@supabase/supabase-js@2';
+
+const SyncService = (() => {
+  function ls() {
+    try {
+      const probe = '__sync_probe__';
+      window.localStorage.setItem(probe, '1');
+      window.localStorage.removeItem(probe);
+      return window.localStorage;
+    } catch (err) {
+      return null;
+    }
+  }
+
+  function normalizeConfig(cfg) {
+    return {
+      url: typeof cfg?.url === 'string' ? cfg.url.trim().replace(/\/+$/, '') : '',
+      anonKey: typeof cfg?.anonKey === 'string' ? cfg.anonKey.trim() : '',
+      userKey: typeof cfg?.userKey === 'string' ? cfg.userKey.trim() : '',
+    };
+  }
+
+  function validateConfig(cfg) {
+    const c = normalizeConfig(cfg);
+    const errors = {};
+    if (!c.url) errors.url = 'syncErrUrlEmpty';
+    else if (!/^https:\/\/[^\s/]+\.[^\s/]+/.test(c.url)) errors.url = 'syncErrUrlShape';
+    if (!c.anonKey) errors.anonKey = 'syncErrKeyEmpty';
+    if (!c.userKey) errors.userKey = 'syncErrUserEmpty';
+    return { ok: Object.keys(errors).length === 0, errors, config: c };
+  }
+
+  function loadConfig() {
+    const store = ls();
+    if (!store) return null;
+    let raw = null;
+    try { raw = store.getItem(SYNC_KEY); } catch (err) { return null; }
+    if (!raw) return null;
+    try {
+      const cfg = normalizeConfig(JSON.parse(raw));
+      return (cfg.url && cfg.anonKey && cfg.userKey) ? cfg : null;
+    } catch (err) {
+      return null;
+    }
+  }
+
+  function saveConfig(cfg) {
+    const store = ls();
+    if (!store) return false;
+    try { store.setItem(SYNC_KEY, JSON.stringify(normalizeConfig(cfg))); return true; }
+    catch (err) { return false; }
+  }
+
+  function clearConfig() {
+    const store = ls();
+    if (!store) return false;
+    try { store.removeItem(SYNC_KEY); return true; } catch (err) { return false; }
+  }
+
+  function isConfigured() { return loadConfig() !== null; }
+
+  function toRow(ev, userKey) {
+    return {
+      id: ev.id,
+      user_key: userKey,
+      date: ev.date,
+      start_time: ev.startTime,
+      end_time: ev.endTime,
+      title: ev.title,
+      category: ev.category || '',
+      color: ev.color,
+      note: ev.note || '',
+      created_at: ev.createdAt,
+      updated_at: ev.updatedAt,
+    };
+  }
+
+  function fromRow(row) {
+    return {
+      id: row.id,
+      date: row.date,
+      startTime: row.start_time,
+      endTime: row.end_time,
+      title: row.title,
+      category: row.category || '',
+      color: row.color,
+      note: row.note || '',
+      createdAt: row.created_at || row.updated_at,
+      updatedAt: row.updated_at || row.created_at,
+    };
+  }
+
+  function stamp(value) {
+    if (typeof value !== 'string') return 0;
+    const ms = Date.parse(value);
+    return Number.isNaN(ms) ? 0 : ms;
+  }
+
+  /**
+   * Last-write-wins merge.
+   *
+   * Deletions are deliberately not synced: without tombstones, "row missing
+   * upstream" and "row deleted upstream" are indistinguishable, and guessing
+   * wrong destroys data silently.
+   */
+  function mergeEvents(localList, remoteList) {
+    const local = new Map(localList.map((e) => [e.id, e]));
+    const remote = new Map(remoteList.map((e) => [e.id, e]));
+    const merged = [];
+    const toPush = [];
+    const toPull = [];
+
+    local.forEach((mine, id) => {
+      const theirs = remote.get(id);
+      if (!theirs) { merged.push(mine); toPush.push(mine); return; }
+      const a = stamp(mine.updatedAt);
+      const b = stamp(theirs.updatedAt);
+      if (b > a) { merged.push(theirs); toPull.push(theirs); }
+      else if (a > b) { merged.push(mine); toPush.push(mine); }
+      else merged.push(mine);
+    });
+
+    remote.forEach((theirs, id) => {
+      if (!local.has(id)) { merged.push(theirs); toPull.push(theirs); }
+    });
+
+    return { merged, toPush, toPull };
+  }
+
+  function classifyError(err) {
+    const msg = String(err?.message || err || '');
+    const code = err?.code || '';
+    if (/Failed to fetch|NetworkError|ERR_NAME_NOT_RESOLVED|fetch failed/i.test(msg)) {
+      return { code: 'syncErrNetwork', detail: msg };
+    }
+    if (code === '42P01' || /relation .* does not exist|Could not find the table/i.test(msg)) {
+      return { code: 'syncErrNoTable', detail: msg };
+    }
+    if (code === '42501' || /row-level security|permission denied/i.test(msg)) {
+      return { code: 'syncErrRls', detail: msg };
+    }
+    if (/Invalid API key|JWT|apikey/i.test(msg)) return { code: 'syncErrAuth', detail: msg };
+    return { code: 'syncErrUnknown', detail: msg };
+  }
+
+  let clientPromise = null;
+  let clientFor = '';
+
+  async function getClient(cfg) {
+    const fingerprint = cfg.url + '::' + cfg.anonKey;
+    if (clientPromise && clientFor === fingerprint) return clientPromise;
+    clientFor = fingerprint;
+    clientPromise = (async () => {
+      const mod = await import(SUPABASE_CDN);
+      return mod.createClient(cfg.url, cfg.anonKey, {
+        auth: { persistSession: false, autoRefreshToken: false },
+      });
+    })();
+    return clientPromise;
+  }
+
+  function resetClient() { clientPromise = null; clientFor = ''; }
+
+  async function testConnection(rawConfig) {
+    const { ok, errors, config } = validateConfig(rawConfig);
+    if (!ok) return { ok: false, code: Object.values(errors)[0] };
+    try {
+      const supabase = await getClient(config);
+      const { error, count } = await supabase
+        .from(SYNC_TABLE)
+        .select('id', { count: 'exact', head: true })
+        .eq('user_key', config.userKey);
+      if (error) throw error;
+      return { ok: true, count: count || 0 };
+    } catch (err) {
+      return { ok: false, ...classifyError(err) };
+    }
+  }
+
+  async function syncNow(localEvents, rawConfig) {
+    const { ok, errors, config } = validateConfig(rawConfig || loadConfig() || {});
+    if (!ok) return { ok: false, code: Object.values(errors)[0] };
+    try {
+      const supabase = await getClient(config);
+      const { data, error } = await supabase
+        .from(SYNC_TABLE)
+        .select('*')
+        .eq('user_key', config.userKey);
+      if (error) throw error;
+
+      const remote = (data || []).map(fromRow);
+      const { merged, toPush, toPull } = mergeEvents(localEvents, remote);
+
+      if (toPush.length) {
+        const rows = toPush.map((ev) => toRow(ev, config.userKey));
+        const { error: upErr } = await supabase
+          .from(SYNC_TABLE)
+          .upsert(rows, { onConflict: 'id' });
+        if (upErr) throw upErr;
+      }
+
+      return {
+        ok: true,
+        merged,
+        pushed: toPush.length,
+        pulled: toPull.length,
+        syncedAt: new Date().toISOString(),
+      };
+    } catch (err) {
+      return { ok: false, ...classifyError(err) };
+    }
+  }
+
+  /* Last-sync timestamp — its own key, so the validated config record stays
+     purely credentials. */
+  const SYNC_AT_KEY = 'calendar_sync_at_v1';
+
+  function loadLastSync() {
+    const store = ls();
+    if (!store) return null;
+    try {
+      const raw = store.getItem(SYNC_AT_KEY);
+      return (raw && !Number.isNaN(Date.parse(raw))) ? raw : null;
+    } catch (err) { return null; }
+  }
+
+  function saveLastSync(iso) {
+    const store = ls();
+    if (!store) return false;
+    try { store.setItem(SYNC_AT_KEY, iso); return true; } catch (err) { return false; }
+  }
+
+  function clearLastSync() {
+    const store = ls();
+    if (!store) return false;
+    try { store.removeItem(SYNC_AT_KEY); return true; } catch (err) { return false; }
+  }
+
+  return {
+    loadConfig, saveConfig, clearConfig, isConfigured, validateConfig,
+    toRow, fromRow, mergeEvents, classifyError,
+    testConnection, syncNow, resetClient,
+    loadLastSync, saveLastSync, clearLastSync,
+  };
+})();
+
+/**
+ * Compact "when did this last sync" label. Relative for the first day — that
+ * is the question a sync indicator is actually answering — then a clock time,
+ * then a date.
+ */
+function formatSyncTime(iso, now) {
+  now = now || Date.now();
+  if (!iso) return t('syncNotSynced');
+  const then = Date.parse(iso);
+  if (Number.isNaN(then)) return t('syncNotSynced');
+
+  const diffMin = Math.floor((now - then) / 60000);
+  if (diffMin < 1) return t('syncJustNow');
+  if (diffMin < 60) return t('syncMinsAgo', { n: diffMin });
+
+  const diffHr = Math.floor(diffMin / 60);
+  if (diffHr < 12) return t('syncHrsAgo', { n: diffHr });
+
+  const d = new Date(then);
+  if (new Date(now).toDateString() === d.toDateString()) {
+    return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  }
+  const y = new Date(now);
+  y.setDate(y.getDate() - 1);
+  if (y.toDateString() === d.toDateString()) return t('syncYesterday');
+  return d.toLocaleDateString([], { month: 'short', day: 'numeric' });
+}
+
+const SETUP_SQL = `-- Time Record — sync table
+--
+-- READ THIS FIRST. This setup has no login, so the anon key is the only
+-- credential, and an anon key shipped to a browser is public by definition.
+-- The policy below therefore lets any holder of that key read and write this
+-- table. user_key separates your rows from another device's; it is NOT a
+-- security boundary, because anyone with the key can simply query without it.
+--
+-- That is an acceptable trade for a private hobby calendar in an obscure
+-- project. It is NOT acceptable for anything sensitive or shared.
+
+create table if not exists public.events (
+  id          text primary key,
+  user_key    text not null,
+  date        text not null,
+  start_time  text not null,
+  end_time    text not null,
+  title       text not null,
+  category    text default '',
+  color       text default 'blue',
+  note        text default '',
+  created_at  text,
+  updated_at  text
+);
+
+create index if not exists events_user_key_idx
+  on public.events (user_key);
+
+alter table public.events enable row level security;
+
+create policy "anon full access" on public.events
+  for all to anon
+  using (true)
+  with check (true);`;
+
+/* ============================================================
    6. APP STATE
    ============================================================ */
 
@@ -593,6 +982,8 @@ const I = {
   up: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 15V4M7.5 8.5L12 4l4.5 4.5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M4 15v2a3 3 0 0 0 3 3h10a3 3 0 0 0 3-3v-2" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>',
   down: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4v11M7.5 10.5L12 15l4.5-4.5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M4 15v2a3 3 0 0 0 3 3h10a3 3 0 0 0 3-3v-2" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>',
   trash: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><path d="M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><path d="M6.5 7l1 12a2 2 0 0 0 2 2h5a2 2 0 0 0 2-2l1-12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>',
+  cloud: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M17.5 19a4.5 4.5 0 0 0 .5-8.97 6 6 0 0 0-11.6-1.54A4.25 4.25 0 0 0 6.75 19z" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/></svg>',
+  sync: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 11.5a8 8 0 0 0-13.7-5.1L3.5 9" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M4 12.5a8 8 0 0 0 13.7 5.1L20.5 15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M3.5 4.5V9H8" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M20.5 19.5V15H16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>',
   db: '<svg viewBox="0 0 24 24" aria-hidden="true"><ellipse cx="12" cy="6" rx="7.5" ry="3.2" fill="none" stroke="currentColor" stroke-width="2"/><path d="M4.5 6v6c0 1.77 3.36 3.2 7.5 3.2s7.5-1.43 7.5-3.2V6" fill="none" stroke="currentColor" stroke-width="2"/><path d="M4.5 12v6c0 1.77 3.36 3.2 7.5 3.2s7.5-1.43 7.5-3.2v-6" fill="none" stroke="currentColor" stroke-width="2"/></svg>',
   list: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 6h13M8 12h13M8 18h13" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><path d="M3.5 6h.01M3.5 12h.01M3.5 18h.01" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"/></svg>',
   info: '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" stroke-width="2"/><path d="M12 11v5" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><path d="M12 8h.01" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"/></svg>',
@@ -1469,6 +1860,230 @@ function settingsRow({ icon, label, value, onClick }) {
   return b;
 }
 
+/* ── Cloud Sync card + settings sheet ───────────────────────── */
+
+let syncBusy = false;
+let syncedAt = null;
+
+function syncStatusLine() {
+  if (!SyncService.isConfigured()) return t('syncDesc');
+  const cfg = SyncService.loadConfig();
+  const where = cfg ? cfg.url.replace(/^https:\/\//, '') : '';
+  const at = syncedAt || SyncService.loadLastSync();
+  const when = at ? t('syncLast', { s: formatSyncTime(at) }) : t('syncNever');
+  return where + ' · ' + when;
+}
+
+async function runSync() {
+  if (syncBusy) return;
+  syncBusy = true;
+  renderMoreScreen();
+  try {
+    const local = await DataService.exportAll();
+    const res = await SyncService.syncNow(local, SyncService.loadConfig());
+    if (!res.ok) { toast(t(res.code)); return; }
+    if (res.pulled > 0) {
+      await DataService.importAll(res.merged);
+      await refreshEvents();
+    }
+    syncedAt = res.syncedAt;
+    SyncService.saveLastSync(res.syncedAt);
+    toast(res.pushed || res.pulled
+      ? t('syncDone', { u: res.pushed, d: res.pulled })
+      : t('syncNoChanges'));
+  } finally {
+    syncBusy = false;
+    refreshAll();
+  }
+}
+
+/* Top-right chip: how long ago the last sync was, without scrolling to the
+   card. Tapping it syncs. */
+function renderSyncChip() {
+  const chip = document.getElementById('syncChip');
+  if (!chip) return;
+  const on = SyncService.isConfigured();
+  chip.hidden = !on;
+  if (!on) return;
+
+  const label = syncBusy ? t('syncing') : formatSyncTime(SyncService.loadLastSync());
+  chip.innerHTML = '<span class="sync-chip-icon' + (syncBusy ? ' is-spinning' : '') + '">'
+    + I.sync + '</span><span>' + label + '</span>';
+  chip.disabled = syncBusy;
+  chip.setAttribute('aria-label', t('sync') + ' — ' + label);
+  if (!chip.dataset.bound) {
+    chip.dataset.bound = '1';
+    chip.addEventListener('click', runSync);
+  }
+}
+
+// A relative label goes stale on its own, so refresh it on a timer too.
+setInterval(() => {
+  const screen = document.getElementById('screen-more');
+  if (screen && !screen.hidden) renderSyncChip();
+}, 30000);
+
+function syncCard() {
+  const card = settingsCard();
+  const on = SyncService.isConfigured();
+
+  const head = el('div', 'settings-head');
+  const titleRow = el('div', 'settings-title-row');
+  titleRow.appendChild(el('h2', 'settings-title', t('sync')));
+  const badge = el('span', 'sync-badge' + (on ? ' is-on' : ''), on ? t('syncOn') : t('syncOff'));
+  titleRow.appendChild(badge);
+  head.appendChild(titleRow);
+  head.appendChild(el('p', 'settings-desc', syncStatusLine()));
+  card.appendChild(head);
+
+  const actions = el('div', 'settings-actions');
+  if (on) {
+    actions.appendChild(segButton(syncBusy ? t('syncing') : t('syncNow'), {
+      icon: I.sync, primary: true, onClick: runSync,
+    }));
+    actions.appendChild(segButton(t('syncSettings'), { onClick: openSyncSettings }));
+  } else {
+    actions.appendChild(segButton(t('syncSetUp'), {
+      icon: I.cloud, primary: true, onClick: openSyncSettings,
+    }));
+  }
+  card.appendChild(actions);
+  return card;
+}
+
+function syncField(labelText, hintText, value, opts) {
+  opts = opts || {};
+  const wrap = el('div', 'sync-field');
+  wrap.appendChild(el('label', 'sync-label', labelText));
+  const input = el('input', 'sync-input');
+  input.type = opts.password ? 'password' : 'text';
+  input.value = value || '';
+  input.placeholder = opts.placeholder || '';
+  input.autocapitalize = 'none';
+  input.autocorrect = 'off';
+  input.spellcheck = false;
+  wrap.appendChild(input);
+  const hint = el('p', 'sync-hint', hintText);
+  wrap.appendChild(hint);
+  return { wrap, input, hint };
+}
+
+function openSyncSettings() {
+  const existing = SyncService.loadConfig();
+  const body = el('div', 'sync-form');
+
+  const urlF = syncField(t('syncUrl'), t('syncUrlHint'), existing?.url,
+    { placeholder: 'https://xxxxx.supabase.co' });
+  const keyF = syncField(t('syncAnonKey'), t('syncAnonKeyHint'), existing?.anonKey,
+    { placeholder: 'eyJhbGciOi…', password: true });
+  const userF = syncField(t('syncUserKey'), t('syncUserKeyHint'), existing?.userKey,
+    { placeholder: 'my-private-phrase' });
+  body.append(urlF.wrap, keyF.wrap, userF.wrap);
+
+  const status = el('p', 'sync-status');
+  status.style.display = 'none';
+  body.appendChild(status);
+
+  const draft = () => ({
+    url: urlF.input.value, anonKey: keyF.input.value, userKey: userF.input.value,
+  });
+
+  function showErrors(errors) {
+    [['url', urlF], ['anonKey', keyF], ['userKey', userF]].forEach(([k, f]) => {
+      if (errors[k]) {
+        f.hint.textContent = t(errors[k]);
+        f.hint.classList.add('is-error');
+        f.input.classList.add('is-invalid');
+      } else {
+        f.hint.classList.remove('is-error');
+        f.input.classList.remove('is-invalid');
+      }
+    });
+  }
+
+  function setStatus(ok, message) {
+    status.style.display = '';
+    status.textContent = message;
+    status.classList.toggle('is-ok', !!ok);
+    status.classList.toggle('is-bad', !ok);
+  }
+
+  async function runTest() {
+    const { ok, errors, config } = SyncService.validateConfig(draft());
+    showErrors(errors);
+    if (!ok) return null;
+    setStatus(true, t('syncTesting'));
+    const res = await SyncService.testConnection(config);
+    if (res.ok) { setStatus(true, t('syncOkFound', { n: res.count })); return config; }
+    setStatus(false, t(res.code));
+    return null;
+  }
+
+  const sqlWrap = el('details', 'sync-sql');
+  const summary = el('summary', 'sync-sql-summary', t('syncSetupSql'));
+  sqlWrap.appendChild(summary);
+  sqlWrap.appendChild(el('p', 'sync-hint', t('syncSetupSqlDesc')));
+  const pre = el('pre', 'json-block', SETUP_SQL);
+  sqlWrap.appendChild(pre);
+  const copyBtn = segButton('Copy', {
+    onClick: async () => {
+      try { await navigator.clipboard.writeText(SETUP_SQL); }
+      catch (err) {
+        const ta = document.createElement('textarea');
+        ta.value = SETUP_SQL;
+        ta.style.position = 'fixed';
+        ta.style.opacity = '0';
+        document.body.appendChild(ta);
+        ta.select();
+        try { document.execCommand('copy'); } catch (e) { /* ignore */ }
+        ta.remove();
+      }
+      copyBtn.textContent = '✓';
+      setTimeout(() => { copyBtn.textContent = 'Copy'; }, 1600);
+    },
+  });
+  sqlWrap.appendChild(copyBtn);
+  if (!existing) sqlWrap.open = true;
+  body.appendChild(sqlWrap);
+
+  body.appendChild(el('p', 'sync-note', t('syncSecurityNote')));
+
+  const footer = el('div', 'study-modal-foot');
+  const saveBtn = segButton(t('save'), {
+    primary: true,
+    onClick: async () => {
+      // Never persist an unverified config: sync that looks on but is broken
+      // is worse than sync that is plainly off.
+      const config = await runTest();
+      if (!config) return;
+      SyncService.saveConfig(config);
+      SyncService.resetClient();
+      toast(t('syncSaved'));
+      api.close();
+      renderMoreScreen();
+    },
+  });
+  footer.appendChild(saveBtn);
+  footer.appendChild(segButton(t('syncTest'), { onClick: runTest }));
+  if (existing) {
+    footer.appendChild(segButton(t('syncDisconnect'), {
+      danger: true,
+      onClick: () => {
+        SyncService.clearConfig();
+        SyncService.resetClient();
+        SyncService.clearLastSync();
+        syncedAt = null;
+        toast(t('syncDisconnected'));
+        api.close();
+        renderMoreScreen();
+      },
+    }));
+  }
+
+  const api = openStudyModal({ title: t('sync'), body, footer });
+  return api;
+}
+
 function renderMoreScreen() {
   const groups = document.getElementById('moreGroups');
   groups.innerHTML = '';
@@ -1494,6 +2109,10 @@ function renderMoreScreen() {
   dataCard.appendChild(actions);
   dataCard.appendChild(storageKeysBlock());
   groups.appendChild(dataCard);
+
+  // ── Cloud Sync
+  groups.appendChild(syncCard());
+  renderSyncChip();
 
   // ── Language
   const langCard = settingsCard();

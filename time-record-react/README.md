@@ -63,9 +63,18 @@ its data** when it eventually opens the React build from the same URL.
 ```
 UI (pages / components)
    └── DataService          ← facade, the only data access point
-         └── StorageService ← localStorage backend today
-               └── future: Supabase (re-implement the same methods)
+         └── StorageService ← localStorage backend (the source of truth)
+
+Cloud Sync (optional, opt-in)
+   SyncSettingsModal → supabase-sync.js → Supabase
+                            └── sync-core.js  ← merge rules, no transport
 ```
+
+`sync-core.js` is deliberately transport-free so the merge semantics can be
+tested without a network; `supabase-sync.js` holds the client and loads the
+SDK through a dynamic import, keeping it out of the initial bundle. The same
+logic exists in legacy `app.js` as `SyncService`, and `verify-sync.mjs` checks
+the two agree row-for-row.
 
 `StorageService` and `DataService` were copied over verbatim, including the
 localStorage probe, the in-memory fallback for sandboxed previews, and the

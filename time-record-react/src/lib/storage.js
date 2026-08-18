@@ -120,7 +120,14 @@ export const StorageService = (() => {
 
   async function clearAll() {
     memoryEvents = [];
-    if (ls) { try { ls.removeItem(KEY); } catch (err) { /* ignore */ } }
+    wasFresh = false;
+    // Write an empty record instead of removing the key: removal would make the
+    // next launch look like a fresh install and re-trigger the demo seed, which
+    // would hand back exactly the data the user just cleared.
+    if (ls) {
+      try { ls.setItem(KEY, JSON.stringify({ version: 1, events: [] })); }
+      catch (err) { /* ignore */ }
+    }
     return true;
   }
 

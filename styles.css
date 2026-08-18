@@ -1958,3 +1958,171 @@ textarea.text-input { resize: none; line-height: 1.45; }
     animation-duration: 0.01ms !important;
   }
 }
+
+/* ============================================================
+   CLOUD SYNC  (More screen card + settings sheet)
+   ============================================================ */
+
+.settings-title-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.sync-badge {
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: var(--surface-2);
+  color: var(--text-3);
+}
+.sync-badge.is-on {
+  background: rgba(52, 199, 89, 0.15);
+  color: #1c7c3f;
+}
+
+.sync-form {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.sync-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.sync-label {
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+
+.sync-input {
+  width: 100%;
+  min-width: 0;
+  height: 40px;
+  padding: 0 12px;
+  font-size: 16px; /* 16px keeps iOS Safari from zooming on focus */
+  color: var(--text);
+  background: var(--surface);
+  border: 1px solid var(--divider);
+  border-radius: 12px;
+  outline: none;
+  -webkit-appearance: none;
+  appearance: none;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+.sync-input:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-soft);
+}
+.sync-input.is-invalid {
+  border-color: var(--danger);
+}
+
+.sync-hint {
+  font-size: 11px;
+  line-height: 1.45;
+  color: var(--text-3);
+}
+.sync-hint.is-error {
+  color: var(--danger);
+  font-weight: 600;
+}
+
+.sync-status {
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.45;
+  padding: 8px 12px;
+  border-radius: 12px;
+  border: 1px solid transparent;
+}
+.sync-status.is-ok {
+  color: #1c7c3f;
+  background: rgba(52, 199, 89, 0.1);
+  border-color: rgba(52, 199, 89, 0.3);
+}
+.sync-status.is-bad {
+  color: var(--danger);
+  background: var(--danger-soft);
+  border-color: rgba(255, 59, 48, 0.3);
+}
+
+.sync-sql {
+  border: 1px solid var(--divider);
+  border-radius: 12px;
+  padding: 10px 12px;
+  background: var(--surface-2);
+}
+.sync-sql-summary {
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  list-style: none;
+}
+.sync-sql-summary::-webkit-details-marker { display: none; }
+.sync-sql-summary::after {
+  content: '+';
+  float: right;
+  color: var(--text-3);
+}
+.sync-sql[open] .sync-sql-summary::after { content: '−'; }
+.sync-sql .json-block {
+  max-height: 180px;
+  overflow: auto;
+  margin-top: 8px;
+  font-size: 11px;
+}
+.sync-sql .btn-seg { margin-top: 8px; }
+
+.sync-note {
+  font-size: 11px;
+  line-height: 1.5;
+  padding: 8px 12px;
+  border-radius: 12px;
+  color: #8a6100;
+  background: rgba(255, 179, 0, 0.1);
+  border: 1px solid rgba(255, 179, 0, 0.3);
+}
+
+/* ── Sync chip (More topbar, top-right) ── */
+
+.sync-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 4px 10px;
+  margin-bottom: 4px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-3);
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-pill);
+  cursor: pointer;
+  white-space: nowrap;
+  transition: opacity 0.15s ease;
+}
+.sync-chip:active { opacity: 0.6; }
+.sync-chip[disabled] { opacity: 0.6; }
+.sync-chip-icon {
+  display: inline-flex;
+  width: 12px;
+  height: 12px;
+}
+.sync-chip-icon svg { width: 12px; height: 12px; }
+.sync-chip-icon.is-spinning svg { animation: sync-spin 1s linear infinite; }
+
+@keyframes sync-spin {
+  to { transform: rotate(360deg); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sync-chip-icon.is-spinning svg { animation: none; }
+}
