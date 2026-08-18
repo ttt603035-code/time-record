@@ -1712,6 +1712,9 @@ function updateSyncLabels() {
   document.querySelectorAll('.sync-refresh').forEach((node) => {
     node.setAttribute('aria-label', t('refresh'));
   });
+  document.querySelectorAll('.sync-refresh-label').forEach((node) => {
+    node.textContent = t('refresh');
+  });
 }
 
 function storageKeysBlock() {

@@ -1974,19 +1974,13 @@ textarea.text-input { resize: none; line-height: 1.45; }
 .sync-actions { display: flex; align-items: center; gap: 6px; }
 .sync-chip { font-variant-numeric: tabular-nums; }
 .sync-refresh {
-  width: 22px;
-  height: 22px;
-  border-radius: 0;
-  border: none;
-  background: transparent;
-  box-shadow: none;
-  color: var(--text-2);
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  padding: 0;
+  width: auto;
+  height: auto;
+  min-width: 0;
+  flex: 0 0 auto;
+  white-space: nowrap;
 }
-.sync-refresh svg { width: 15px; height: 15px; }
+.sync-refresh svg { width: 14px; height: 14px; }
 .sync-refresh:active { opacity: 0.55; }
 .chart-head-reset { margin-left: auto; flex: 0 0 auto; min-height: 32px; }
 
