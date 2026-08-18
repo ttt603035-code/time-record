@@ -44,11 +44,23 @@ const EVENT_COLORS = {
   indigo: '#8E93D8',
   brown: '#C0A188',
   gray: '#A9A9AF',
+  peach: '#F2C4A6',
+  coral: '#E9A39C',
+  blush: '#E8B5C4',
+  lilac: '#C5B6DC',
+  mauve: '#B8A3C0',
+  sky: '#A7C8DC',
+  seafoam: '#9DCFC4',
+  sage: '#A8C4A6',
+  sand: '#D4C4A4',
+  gold: '#D8C48A',
+  wine: '#C49098',
+  slate: '#A8B0B8',
 };
 const COLOR_ORDER = [
-  'blue', 'cyan', 'teal', 'mint', 'green',
-  'yellow', 'orange', 'red', 'pink', 'purple',
-  'indigo', 'brown', 'gray',
+  'blue', 'sky', 'cyan', 'teal', 'seafoam', 'mint', 'green', 'sage',
+  'gold', 'yellow', 'sand', 'orange', 'peach', 'coral', 'red', 'wine',
+  'blush', 'pink', 'mauve', 'purple', 'lilac', 'indigo', 'brown', 'slate', 'gray',
 ];
 const HEX_COLOR = /^#[0-9A-Fa-f]{6}$/;
 function resolveColor(c) {
