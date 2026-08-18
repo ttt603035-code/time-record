@@ -65,6 +65,38 @@ export function isConfigured() {
   return loadConfig() !== null;
 }
 
+/* ── Last-sync timestamp ─────────────────────────────────────
+   Kept under its own key rather than inside the config record:
+   the config is validated field-by-field on load, and a stray
+   timestamp there would either be stripped or have to be
+   special-cased on every read.
+   ─────────────────────────────────────────────────────────── */
+
+const SYNC_AT_KEY = 'calendar_sync_at_v1';
+
+export function loadLastSync() {
+  const store = safeLocalStorage();
+  if (!store) return null;
+  try {
+    const raw = store.getItem(SYNC_AT_KEY);
+    return raw && !Number.isNaN(Date.parse(raw)) ? raw : null;
+  } catch (err) {
+    return null;
+  }
+}
+
+export function saveLastSync(iso) {
+  const store = safeLocalStorage();
+  if (!store) return false;
+  try { store.setItem(SYNC_AT_KEY, iso); return true; } catch (err) { return false; }
+}
+
+export function clearLastSync() {
+  const store = safeLocalStorage();
+  if (!store) return false;
+  try { store.removeItem(SYNC_AT_KEY); return true; } catch (err) { return false; }
+}
+
 /* ── Client ─────────────────────────────────────────────────── */
 
 let clientPromise = null;

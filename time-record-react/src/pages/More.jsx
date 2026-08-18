@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 
 import { openImportGuide } from '@/components/ImportGuideModal.jsx';
 import { openSyncSettings } from '@/components/SyncSettingsModal.jsx';
+import { SyncStatusBadge } from '@/components/SyncStatusBadge.jsx';
 import { useAlertDialog } from '@/hooks/useAlertDialog.jsx';
 import { THEMES } from '@/lib/themes.js';
 import { openTemplatesModal } from '@/components/TemplatesModal.jsx';
@@ -21,7 +22,9 @@ import { getLang, t } from '@/lib/i18n.js';
 import { toast } from '@/lib/overlays.js';
 import { importPayload } from '@/lib/shortcut-import.js';
 import { StorageService } from '@/lib/storage.js';
-import { isConfigured, loadConfig, syncNow } from '@/lib/supabase-sync.js';
+import {
+  clearLastSync, isConfigured, loadConfig, loadLastSync, saveLastSync, syncNow,
+} from '@/lib/supabase-sync.js';
 import { maskKey } from '@/lib/sync-core.js';
 import { formatBytes } from '@/lib/analytics.js';
 import { cn } from '@/lib/utils.js';
@@ -91,7 +94,7 @@ export function MorePage({
   const [keysOpen, setKeysOpen] = useState(false);
   const [syncOn, setSyncOn] = useState(() => isConfigured());
   const [syncBusy, setSyncBusy] = useState(false);
-  const [syncedAt, setSyncedAt] = useState(null);
+  const [syncedAt, setSyncedAt] = useState(() => loadLastSync());
   const { showDialog, dialog } = useAlertDialog();
   // Always hand the modals the freshest data without rebuilding them.
   const dataRef = useRef({ events, categories });
@@ -218,6 +221,7 @@ export function MorePage({
         await onImported?.();
       }
       setSyncedAt(res.syncedAt);
+      saveLastSync(res.syncedAt);
       toast(res.pushed || res.pulled
         ? t('syncDone', { u: res.pushed, d: res.pulled })
         : t('syncNoChanges'));
@@ -254,6 +258,13 @@ export function MorePage({
     <main className="screen is-active" id="screen-more" aria-label="More">
       <header className="topbar">
         <h1 className="page-title">{t('more')}</h1>
+        <SyncStatusBadge
+          configured={syncOn}
+          syncedAt={syncedAt}
+          busy={syncBusy}
+          lang={lang}
+          onClick={runSync}
+        />
       </header>
 
       <div className="mt-3.5 flex flex-col gap-4" id="moreGroups">
@@ -377,7 +388,7 @@ export function MorePage({
                   label={t('syncSettings')}
                   onClick={() => openSyncSettings({
                     onSaved: () => setSyncOn(true),
-                    onDisconnected: () => { setSyncOn(false); setSyncedAt(null); },
+                    onDisconnected: () => { setSyncOn(false); setSyncedAt(null); clearLastSync(); },
                   })}
                 />
               </>
@@ -388,7 +399,7 @@ export function MorePage({
                 variant="default"
                 onClick={() => openSyncSettings({
                   onSaved: () => setSyncOn(true),
-                  onDisconnected: () => { setSyncOn(false); setSyncedAt(null); },
+                  onDisconnected: () => { setSyncOn(false); setSyncedAt(null); clearLastSync(); },
                 })}
               />
             )}

@@ -66,6 +66,8 @@ const I18N = {
     syncDesc: 'Optionally mirror your events to your own Supabase project.',
     syncOff: 'Off', syncOn: 'On', syncSetUp: 'Set up', syncSettings: 'Settings',
     syncNow: 'Sync now', syncing: 'Syncing…', syncNever: 'Never synced',
+    syncJustNow: 'just now', syncMinsAgo: '%n min ago', syncHrsAgo: '%n h ago',
+    syncYesterday: 'yesterday', syncNotSynced: 'Not synced',
     syncLast: 'Last synced %s', syncDisconnect: 'Disconnect',
     syncUrl: 'Project URL', syncAnonKey: 'Anon key', syncUserKey: 'Passphrase',
     syncUrlHint: 'Settings \u2192 Data API \u2192 Project URL',
@@ -141,6 +143,8 @@ const I18N = {
     syncDesc: '可选：把日程同步到你自己的 Supabase 项目。',
     syncOff: '未开启', syncOn: '已连接', syncSetUp: '设置', syncSettings: '设置',
     syncNow: '立即同步', syncing: '同步中…', syncNever: '尚未同步',
+    syncJustNow: '刚刚', syncMinsAgo: '%n 分钟前', syncHrsAgo: '%n 小时前',
+    syncYesterday: '昨天', syncNotSynced: '未同步',
     syncLast: '上次同步 %s', syncDisconnect: '断开连接',
     syncUrl: '项目 URL', syncAnonKey: 'Anon key', syncUserKey: '同步口令',
     syncUrlHint: 'Settings \u2192 Data API \u2192 Project URL',
@@ -831,12 +835,66 @@ const SyncService = (() => {
     }
   }
 
+  /* Last-sync timestamp — its own key, so the validated config record stays
+     purely credentials. */
+  const SYNC_AT_KEY = 'calendar_sync_at_v1';
+
+  function loadLastSync() {
+    const store = ls();
+    if (!store) return null;
+    try {
+      const raw = store.getItem(SYNC_AT_KEY);
+      return (raw && !Number.isNaN(Date.parse(raw))) ? raw : null;
+    } catch (err) { return null; }
+  }
+
+  function saveLastSync(iso) {
+    const store = ls();
+    if (!store) return false;
+    try { store.setItem(SYNC_AT_KEY, iso); return true; } catch (err) { return false; }
+  }
+
+  function clearLastSync() {
+    const store = ls();
+    if (!store) return false;
+    try { store.removeItem(SYNC_AT_KEY); return true; } catch (err) { return false; }
+  }
+
   return {
     loadConfig, saveConfig, clearConfig, isConfigured, validateConfig,
     toRow, fromRow, mergeEvents, classifyError,
     testConnection, syncNow, resetClient,
+    loadLastSync, saveLastSync, clearLastSync,
   };
 })();
+
+/**
+ * Compact "when did this last sync" label. Relative for the first day — that
+ * is the question a sync indicator is actually answering — then a clock time,
+ * then a date.
+ */
+function formatSyncTime(iso, now) {
+  now = now || Date.now();
+  if (!iso) return t('syncNotSynced');
+  const then = Date.parse(iso);
+  if (Number.isNaN(then)) return t('syncNotSynced');
+
+  const diffMin = Math.floor((now - then) / 60000);
+  if (diffMin < 1) return t('syncJustNow');
+  if (diffMin < 60) return t('syncMinsAgo', { n: diffMin });
+
+  const diffHr = Math.floor(diffMin / 60);
+  if (diffHr < 12) return t('syncHrsAgo', { n: diffHr });
+
+  const d = new Date(then);
+  if (new Date(now).toDateString() === d.toDateString()) {
+    return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  }
+  const y = new Date(now);
+  y.setDate(y.getDate() - 1);
+  if (y.toDateString() === d.toDateString()) return t('syncYesterday');
+  return d.toLocaleDateString([], { month: 'short', day: 'numeric' });
+}
 
 const SETUP_SQL = `-- Time Record — sync table
 --
@@ -1811,9 +1869,8 @@ function syncStatusLine() {
   if (!SyncService.isConfigured()) return t('syncDesc');
   const cfg = SyncService.loadConfig();
   const where = cfg ? cfg.url.replace(/^https:\/\//, '') : '';
-  const when = syncedAt
-    ? t('syncLast', { s: new Date(syncedAt).toLocaleTimeString() })
-    : t('syncNever');
+  const at = syncedAt || SyncService.loadLastSync();
+  const when = at ? t('syncLast', { s: formatSyncTime(at) }) : t('syncNever');
   return where + ' · ' + when;
 }
 
@@ -1830,6 +1887,7 @@ async function runSync() {
       await refreshEvents();
     }
     syncedAt = res.syncedAt;
+    SyncService.saveLastSync(res.syncedAt);
     toast(res.pushed || res.pulled
       ? t('syncDone', { u: res.pushed, d: res.pulled })
       : t('syncNoChanges'));
@@ -1838,6 +1896,32 @@ async function runSync() {
     refreshAll();
   }
 }
+
+/* Top-right chip: how long ago the last sync was, without scrolling to the
+   card. Tapping it syncs. */
+function renderSyncChip() {
+  const chip = document.getElementById('syncChip');
+  if (!chip) return;
+  const on = SyncService.isConfigured();
+  chip.hidden = !on;
+  if (!on) return;
+
+  const label = syncBusy ? t('syncing') : formatSyncTime(SyncService.loadLastSync());
+  chip.innerHTML = '<span class="sync-chip-icon' + (syncBusy ? ' is-spinning' : '') + '">'
+    + I.sync + '</span><span>' + label + '</span>';
+  chip.disabled = syncBusy;
+  chip.setAttribute('aria-label', t('sync') + ' — ' + label);
+  if (!chip.dataset.bound) {
+    chip.dataset.bound = '1';
+    chip.addEventListener('click', runSync);
+  }
+}
+
+// A relative label goes stale on its own, so refresh it on a timer too.
+setInterval(() => {
+  const screen = document.getElementById('screen-more');
+  if (screen && !screen.hidden) renderSyncChip();
+}, 30000);
 
 function syncCard() {
   const card = settingsCard();
@@ -1987,6 +2071,7 @@ function openSyncSettings() {
       onClick: () => {
         SyncService.clearConfig();
         SyncService.resetClient();
+        SyncService.clearLastSync();
         syncedAt = null;
         toast(t('syncDisconnected'));
         api.close();
@@ -2027,6 +2112,7 @@ function renderMoreScreen() {
 
   // ── Cloud Sync
   groups.appendChild(syncCard());
+  renderSyncChip();
 
   // ── Language
   const langCard = settingsCard();

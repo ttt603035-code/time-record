@@ -1,21 +1,23 @@
 import { useCallback, useEffect, useRef } from 'react';
+import { CalendarDays, ChartPie } from 'lucide-react';
 
 import { t } from '@/lib/i18n.js';
 
+/**
+ * Tab icons.
+ *
+ * Calendar and Insights come from the project's configured icon library
+ * (components.json -> iconLibrary: "lucide"), per the shadcn skill: use the
+ * configured library rather than hand-rolled SVG. Icons are passed as
+ * component objects, not string keys, and carry no sizing classes — the
+ * tabbar CSS already sizes them.
+ *
+ * Today and More keep their bespoke glyphs: they were not part of this
+ * request, and lucide has no equivalent to the clock-hand and three-dot marks
+ * already tuned to this bar.
+ */
 const TABS = [
-  {
-    id: 'calendar',
-    icon: (
-      <svg viewBox="0 0 24 24" aria-hidden="true">
-        <rect x="3.5" y="5" width="17" height="15.5" rx="3.5" fill="none" stroke="currentColor" strokeWidth="1.8" />
-        <path d="M3.5 9.5h17" stroke="currentColor" strokeWidth="1.8" />
-        <path d="M8.2 2.8v3.4M15.8 2.8v3.4" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
-        <circle cx="8.6" cy="13.4" r="1.2" fill="currentColor" />
-        <circle cx="12" cy="13.4" r="1.2" fill="currentColor" />
-        <circle cx="15.4" cy="13.4" r="1.2" fill="currentColor" />
-      </svg>
-    ),
-  },
+  { id: 'calendar', Icon: CalendarDays },
   {
     id: 'today',
     icon: (
@@ -25,17 +27,7 @@ const TABS = [
       </svg>
     ),
   },
-  {
-    id: 'insights',
-    icon: (
-      <svg viewBox="0 0 24 24" aria-hidden="true">
-        <path d="M4 19.5h16" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
-        <rect x="5.5" y="11" width="3.2" height="7" rx="1.1" fill="none" stroke="currentColor" strokeWidth="1.8" />
-        <rect x="10.4" y="6" width="3.2" height="12" rx="1.1" fill="none" stroke="currentColor" strokeWidth="1.8" />
-        <rect x="15.3" y="9" width="3.2" height="9" rx="1.1" fill="none" stroke="currentColor" strokeWidth="1.8" />
-      </svg>
-    ),
-  },
+  { id: 'insights', Icon: ChartPie },
   {
     id: 'more',
     icon: (
@@ -90,7 +82,7 @@ export function BottomTabBar({ tab, onSelect, lang }) {
     <nav className="tabbar" aria-label="Primary">
       <div className="tabbar-capsule" ref={capsuleRef}>
         <span className="tabbar-indicator" id="tabIndicator" ref={indicatorRef} aria-hidden="true" />
-        {TABS.map(({ id, icon }) => {
+        {TABS.map(({ id, icon, Icon }) => {
           const active = tab === id;
           return (
             <button
@@ -102,7 +94,7 @@ export function BottomTabBar({ tab, onSelect, lang }) {
               aria-current={active ? 'page' : undefined}
               onClick={() => onSelect(id)}
             >
-              {icon}
+              {Icon ? <Icon aria-hidden="true" /> : icon}
               <span className="tab-label">{t(id)}</span>
             </button>
           );

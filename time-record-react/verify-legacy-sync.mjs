@@ -99,6 +99,33 @@ const row = SyncService.toRow(ev('c','2026-08-18T10:00:00Z','x'), 'u1');
 check('Legacy row mapping matches the React one',
   row.user_key==='u1' && row.start_time==='09:00' && !('startTime' in row));
 
+/* ── Sync chip in the legacy topbar ── */
+{
+  // Configure sync and re-render More, then assert the chip appears.
+  window.localStorage.setItem('calendar_sync_v1',
+    JSON.stringify({url:'https://demo.supabase.co', anonKey:'eyJk', userKey:'p'}));
+  window.localStorage.setItem('calendar_sync_at_v1',
+    new Date(Date.now() - 10*60000).toISOString());
+  window.eval('renderMoreScreen()');
+  await new Promise((r) => setTimeout(r, 300));
+
+  const chip = doc.getElementById('syncChip');
+  check('Legacy sync chip exists', !!chip);
+  check('Legacy chip is visible once configured', chip && !chip.hidden);
+  check('Legacy chip shows a relative time', /10 min ago/.test(chip?.textContent || ''), chip?.textContent);
+  check('Legacy chip lives in the topbar', !!chip?.closest('.topbar'));
+  check('Legacy chip formatter matches "just now"',
+    window.eval('formatSyncTime')(new Date().toISOString()) === 'just now');
+  check('Legacy chip formatter handles never-synced',
+    window.eval('formatSyncTime')(null) === 'Not synced');
+
+  // Disconnecting must hide it again and clear the stored timestamp.
+  window.localStorage.removeItem('calendar_sync_v1');
+  window.eval('renderMoreScreen()');
+  await new Promise((r) => setTimeout(r, 200));
+  check('Legacy chip hides when sync is off', doc.getElementById('syncChip').hidden);
+}
+
 check('No runtime errors', errors.length === 0, errors.slice(0,2).join(' | '));
 
 const passed = results.filter(Boolean).length;

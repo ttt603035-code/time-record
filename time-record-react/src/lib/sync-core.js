@@ -144,3 +144,45 @@ export function maskKey(key) {
   if (typeof key !== 'string' || key.length < 12) return '••••';
   return `${key.slice(0, 6)}…${key.slice(-4)}`;
 }
+
+/**
+ * Compact "when did this last sync" label for the header.
+ *
+ * Relative for the first day (that is the question you actually ask of a sync
+ * indicator), then a clock time, then a date. Returns an i18n key plus its
+ * variables so both language packs can phrase it themselves.
+ */
+export function formatSyncTime(iso, now = Date.now()) {
+  if (!iso) return { key: 'syncNotSynced', vars: null, literal: null };
+  const then = Date.parse(iso);
+  if (Number.isNaN(then)) return { key: 'syncNotSynced', vars: null, literal: null };
+
+  const diffMin = Math.floor((now - then) / 60000);
+  if (diffMin < 1) return { key: 'syncJustNow', vars: null, literal: null };
+  if (diffMin < 60) return { key: 'syncMinsAgo', vars: { n: diffMin }, literal: null };
+
+  const diffHr = Math.floor(diffMin / 60);
+  if (diffHr < 12) return { key: 'syncHrsAgo', vars: { n: diffHr }, literal: null };
+
+  const d = new Date(then);
+  const sameDay = new Date(now).toDateString() === d.toDateString();
+  if (sameDay) {
+    return {
+      key: null,
+      vars: null,
+      literal: d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+    };
+  }
+
+  const yesterday = new Date(now);
+  yesterday.setDate(yesterday.getDate() - 1);
+  if (yesterday.toDateString() === d.toDateString()) {
+    return { key: 'syncYesterday', vars: null, literal: null };
+  }
+
+  return {
+    key: null,
+    vars: null,
+    literal: d.toLocaleDateString([], { month: 'short', day: 'numeric' }),
+  };
+}
