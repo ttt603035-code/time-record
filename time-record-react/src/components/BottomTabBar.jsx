@@ -6,43 +6,45 @@ const TABS = [
   {
     id: 'calendar',
     icon: (
-      <svg viewBox="0 0 24 24" aria-hidden="true">
-        <rect x="3.5" y="5" width="17" height="15.5" rx="3.5" fill="none" stroke="currentColor" strokeWidth="1.8" />
-        <path d="M3.5 9.5h17" stroke="currentColor" strokeWidth="1.8" />
-        <path d="M8.2 2.8v3.4M15.8 2.8v3.4" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
-        <circle cx="8.6" cy="13.4" r="1.2" fill="currentColor" />
-        <circle cx="12" cy="13.4" r="1.2" fill="currentColor" />
-        <circle cx="15.4" cy="13.4" r="1.2" fill="currentColor" />
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+        <path d="M8 2v4" />
+        <path d="M16 2v4" />
+        <rect width="18" height="18" x="3" y="4" rx="2" />
+        <path d="M3 10h18" />
+        <path d="M8 14h.01" />
+        <path d="M12 14h.01" />
+        <path d="M16 14h.01" />
+        <path d="M8 18h.01" />
+        <path d="M12 18h.01" />
+        <path d="M16 18h.01" />
       </svg>
     ),
   },
   {
     id: 'today',
     icon: (
-      <svg viewBox="0 0 24 24" aria-hidden="true">
-        <circle cx="12" cy="12" r="8.5" fill="none" stroke="currentColor" strokeWidth="1.8" />
-        <path d="M12 7.5V12l3 2" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+        <circle cx="12" cy="12" r="10" />
+        <polyline points="12 6 12 12 16 14" />
       </svg>
     ),
   },
   {
     id: 'insights',
     icon: (
-      <svg viewBox="0 0 24 24" aria-hidden="true">
-        <path d="M4 19.5h16" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
-        <rect x="5.5" y="11" width="3.2" height="7" rx="1.1" fill="none" stroke="currentColor" strokeWidth="1.8" />
-        <rect x="10.4" y="6" width="3.2" height="12" rx="1.1" fill="none" stroke="currentColor" strokeWidth="1.8" />
-        <rect x="15.3" y="9" width="3.2" height="9" rx="1.1" fill="none" stroke="currentColor" strokeWidth="1.8" />
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+        <path d="M21 12c.552 0 1.005-.449.95-.998a10 10 0 0 0-8.953-8.951c-.55-.055-.998.398-.998.95v8a1 1 0 0 0 1 1z" />
+        <path d="M21.21 15.89A10 10 0 1 1 8 2.83" />
       </svg>
     ),
   },
   {
     id: 'more',
     icon: (
-      <svg viewBox="0 0 24 24" aria-hidden="true">
-        <circle cx="5.5" cy="12" r="1.5" fill="currentColor" />
-        <circle cx="12" cy="12" r="1.5" fill="currentColor" />
-        <circle cx="18.5" cy="12" r="1.5" fill="currentColor" />
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+        <circle cx="12" cy="12" r="1" />
+        <circle cx="19" cy="12" r="1" />
+        <circle cx="5" cy="12" r="1" />
       </svg>
     ),
   },

@@ -1928,6 +1928,43 @@ textarea.text-input { resize: none; line-height: 1.45; }
 /* Language card */
 .lang-btns { display: flex; gap: 8px; margin-top: 10px; }
 
+/* Appearance / sync */
+.theme-swatches { display: flex; flex-wrap: wrap; gap: 12px; }
+.theme-swatch {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  background: none;
+}
+.theme-disc {
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: #fff;
+  transition: transform 0.12s ease, box-shadow 0.12s ease;
+}
+.theme-disc svg { width: 16px; height: 16px; opacity: 0; }
+.theme-swatch.is-selected .theme-disc {
+  transform: scale(1.1);
+  box-shadow: 0 0 0 3px var(--surface), 0 0 0 5px currentColor;
+}
+.theme-swatch.is-selected .theme-disc svg { opacity: 1; }
+.theme-name { font-size: 11px; font-weight: 500; color: var(--text-3); }
+.sync-actions { display: flex; align-items: center; gap: 8px; }
+.sync-chip { font-variant-numeric: tabular-nums; }
+.sync-refresh { width: 36px; height: 36px; }
+.chart-head-reset { margin-left: auto; flex: 0 0 auto; min-height: 32px; }
+
+[data-theme='blue'] { --accent: #5B8DBE; --accent-soft: rgba(91, 141, 190, 0.12); }
+[data-theme='sage'] { --accent: #6FA88C; --accent-soft: rgba(111, 168, 140, 0.12); }
+[data-theme='clay'] { --accent: #C08A6E; --accent-soft: rgba(192, 138, 110, 0.12); }
+[data-theme='lavender'] { --accent: #9186C4; --accent-soft: rgba(145, 134, 196, 0.12); }
+[data-theme='rose'] { --accent: #C4808F; --accent-soft: rgba(196, 128, 143, 0.12); }
+
 /* ───────────────────────── Responsive ───────────────────────── */
 
 @media (min-width: 700px) {

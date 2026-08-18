@@ -28,12 +28,14 @@ export function useAppData() {
   const [categories, setCategories] = useState([]);
   const [lang, setLangState] = useState(getLang());
   const [theme, setThemeState] = useState(DEFAULT_THEME);
+  const [lastSyncAt, setLastSyncAt] = useState(() => Date.now());
   const [ready, setReady] = useState(false);
   const initStarted = useRef(false);
 
   const refreshEvents = useCallback(async () => {
     const list = await DataService.fetchAll();
     setEvents(list);
+    setLastSyncAt(Date.now());
     return list;
   }, []);
 
@@ -144,6 +146,7 @@ export function useAppData() {
     categories,
     lang,
     theme,
+    lastSyncAt,
     ready,
     refreshEvents,
     refreshCategories,

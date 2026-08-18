@@ -63,6 +63,11 @@ const I18N = {
     storage: 'Storage', onThisDevice: 'On this device', limitedPreview: 'Limited (preview)',
     aboutCalendar: 'About Calendar', version: 'v1.0',
     language: 'Language', languageDesc: 'Switch the interface language.',
+    appearance: 'Appearance',
+    appearanceDesc: 'Tints buttons, links and the selected day. Event colours are unchanged.',
+    themeGraphite: 'Graphite', themeBlue: 'Blue', themeSage: 'Sage',
+    themeClay: 'Clay', themeLavender: 'Lavender', themeRose: 'Rose',
+    sync: 'Sync', refresh: 'Refresh',
     english: 'English', chinese: '中文',
     cancel: 'Cancel', done: 'Done', save: 'Save', add: 'Add', delete: 'Delete', clear: 'Clear',
     addEvent: 'Add Event', newEvent: 'New Event', editEvent: 'Edit Event',
@@ -111,6 +116,11 @@ const I18N = {
     storage: '存储', onThisDevice: '此设备', limitedPreview: '受限（预览）',
     aboutCalendar: '关于 Calendar', version: 'v1.0',
     language: '语言', languageDesc: '切换界面语言。',
+    appearance: '主题',
+    appearanceDesc: '影响按钮、链接和选中日期的颜色。分类颜色不受影响。',
+    themeGraphite: '石墨', themeBlue: '雾蓝', themeSage: '鼠尾草',
+    themeClay: '陶土', themeLavender: '薰衣草', themeRose: '玫瑰',
+    sync: '同步', refresh: '刷新',
     english: 'English', chinese: '中文',
     cancel: '取消', done: '完成', save: '保存', add: '添加', delete: '删除', clear: '清空',
     addEvent: '添加日程', newEvent: '新建日程', editEvent: '编辑日程',
@@ -181,6 +191,12 @@ function formatShortDate(iso) {
    ============================================================ */
 
 const pad2 = (n) => String(n).padStart(2, '0');
+
+function formatSyncClock(ms) {
+  const n = new Date(ms || Date.now());
+  return pad2(n.getHours()) + ':' + pad2(n.getMinutes());
+}
+
 
 function isoDate(y, m, d) {
   return y + '-' + pad2(m + 1) + '-' + pad2(d);
@@ -547,6 +563,29 @@ const DataService = {
    ============================================================ */
 
 let appLang = 'en'; // 'en' | 'zh'
+let appTheme = 'graphite';
+let lastSyncAt = Date.now();
+
+const DEFAULT_THEME = 'graphite';
+const THEMES = [
+  { id: 'graphite', labelKey: 'themeGraphite', accent: '#1D1D1F', swatch: '#1D1D1F' },
+  { id: 'blue', labelKey: 'themeBlue', accent: '#5B8DBE', swatch: '#5B8DBE' },
+  { id: 'sage', labelKey: 'themeSage', accent: '#6FA88C', swatch: '#6FA88C' },
+  { id: 'clay', labelKey: 'themeClay', accent: '#C08A6E', swatch: '#C08A6E' },
+  { id: 'lavender', labelKey: 'themeLavender', accent: '#9186C4', swatch: '#9186C4' },
+  { id: 'rose', labelKey: 'themeRose', accent: '#C4808F', swatch: '#C4808F' },
+];
+
+function applyTheme(id) {
+  const theme = THEMES.find((x) => x.id === id) ? id : DEFAULT_THEME;
+  appTheme = theme;
+  const root = document.documentElement;
+  if (theme === DEFAULT_THEME) root.removeAttribute('data-theme');
+  else root.setAttribute('data-theme', theme);
+  return theme;
+}
+
+
 
 const state = {
   viewYear: new Date().getFullYear(),
@@ -598,6 +637,7 @@ const I = {
   info: '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" stroke-width="2"/><path d="M12 11v5" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><path d="M12 8h.01" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"/></svg>',
   pencil: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15.5 5.5l3 3L8 19H5v-3L15.5 5.5z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/><path d="M12.8 8.2l3 3" fill="none" stroke="currentColor" stroke-width="1.8"/></svg>',
   tag: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 4h7.2a1 1 0 0 1 .7.3l8.8 8.8a1 1 0 0 1 0 1.4l-5.2 5.2a1 1 0 0 1-1.4 0l-8.8-8.8a1 1 0 0 1-.3-.7V4z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/><circle cx="9.5" cy="9.5" r="1.3" fill="currentColor"/></svg>',
+  refresh: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12a9 9 0 1 1-9-9c2.52 0 4.93 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/></svg>',
 };
 
 const ICON_CALENDAR_EMPTY = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="3.5" y="5" width="17" height="15.5" rx="3.5"/><path d="M3.5 9.5h17"/><path d="M8.2 2.8v3.4M15.8 2.8v3.4"/></svg>';
@@ -1473,6 +1513,9 @@ function renderMoreScreen() {
   const groups = document.getElementById('moreGroups');
   groups.innerHTML = '';
 
+  const syncLabel = document.getElementById('syncChipLabel');
+  if (syncLabel) syncLabel.textContent = t('sync') + ' · ' + formatSyncClock(lastSyncAt);
+
   if (!StorageService.available) {
     const notice = el('div', 'storage-notice is-visible');
     notice.textContent = 'This preview blocks local storage, so changes will not survive a reload. Deploy to a stable HTTPS URL (e.g. GitHub Pages) for full persistence.';
@@ -1494,6 +1537,27 @@ function renderMoreScreen() {
   dataCard.appendChild(actions);
   dataCard.appendChild(storageKeysBlock());
   groups.appendChild(dataCard);
+
+  // ── Appearance
+  const appearCard = settingsCard();
+  appearCard.appendChild(settingsHead(t('appearance'), t('appearanceDesc')));
+  const themeRow = el('div', 'theme-swatches');
+  THEMES.forEach((th) => {
+    const on = appTheme === th.id;
+    const b = el('button', 'theme-swatch' + (on ? ' is-selected' : ''));
+    b.type = 'button';
+    b.setAttribute('aria-label', t(th.labelKey));
+    b.setAttribute('aria-pressed', String(on));
+    const disc = el('span', 'theme-disc');
+    disc.style.background = th.swatch;
+    disc.innerHTML = I.check;
+    b.appendChild(disc);
+    b.appendChild(el('span', 'theme-name', t(th.labelKey)));
+    b.addEventListener('click', () => applyThemeChoice(th.id));
+    themeRow.appendChild(b);
+  });
+  appearCard.appendChild(themeRow);
+  groups.appendChild(appearCard);
 
   // ── Language
   const langCard = settingsCard();
@@ -1559,6 +1623,12 @@ function openImportGuide() {
   note.style.marginTop = '12px';
   body.appendChild(note);
   openStudyModal({ title: t('importGuide'), body });
+}
+
+async function applyThemeChoice(id) {
+  applyTheme(id);
+  await DataService.setSetting('theme', id);
+  refreshAll();
 }
 
 async function applyLanguage(lang) {
@@ -2691,7 +2761,6 @@ function donutChart(segments, opts) {
   const size = 196, cx = size / 2, cy = size / 2;
   const r = size * 0.37, sw = size * 0.125;
   const C = 2 * Math.PI * r;
-  const GAP = 3; // visible separation between neighbouring segments (spec: 2-4px)
   const total = segments.reduce((s, x) => s + x.minutes, 0) || 0;
   const drawable = segments.filter((seg) => total && seg.minutes > 0);
   const wrap = el('div', 'donut-wrap');
@@ -2704,69 +2773,30 @@ function donutChart(segments, opts) {
     })[char]);
   }
 
-  /*
-   * Arc allocation.
-   *
-   * A segment needs roughly (2 * corner radius + gap) of arc before its two
-   * rounded corners meet. Slices below that are topped up and the space is
-   * taken proportionally from slices that can spare it, so the ring keeps one
-   * uniform thickness (spec item 4) instead of thinning small slices.
-   *
-   * Budget for the widest a segment can get (selection adds 6px) so selecting
-   * one never makes its neighbours collide.
-   */
-  const maxStroke = sw + 6;
-  const corner = sw * DONUT_CORNER_RATIO;
-  const minArc = 2 * corner + GAP + 1;
-  const arcs = donutAllocateArcs(drawable.map((s) => s.minutes), C, minArc);
-
+  // Stock shadcn/Recharts look: plain annular sectors, no gaps, no rounded corners.
+  const arcs = drawable.map((seg) => (seg.minutes / total) * C);
   let paths = '';
   let cursor = 0;
   drawable.forEach((seg, i) => {
     const arc = arcs[i];
     const isSel = selectedKey === seg.key;
-    const w = isSel ? maxStroke : sw;
     const opacity = selectedKey && !isSel ? 0.22 : 1;
-
-    // Half the gap from each side, as an angle on the centreline, so the
-    // visible separation stays constant in px.
-    const inset = drawable.length > 1 ? (GAP / 2) / r : 0;
-    const a0 = ((cursor / C) * 2 * Math.PI) - Math.PI / 2 + inset;
-    const a1 = (((cursor + arc) / C) * 2 * Math.PI) - Math.PI / 2 - inset;
+    const a0 = ((cursor / C) * 2 * Math.PI) - Math.PI / 2;
+    const a1 = (((cursor + arc) / C) * 2 * Math.PI) - Math.PI / 2;
     cursor += arc;
     if (a1 <= a0) return;
-
-    const d = donutSectorPath(cx, cy, r - w / 2, r + w / 2, a0, a1, w * DONUT_CORNER_RATIO);
+    const d = donutSectorPath(cx, cy, r - sw / 2, r + sw / 2, a0, a1, 0);
     if (!d) return;
-
     paths += '<path d="' + d + '" fill="' + attr(seg.color) + '"'
+      + ' data-key="' + attr(seg.key) + '"'
+      + ' role="button" tabindex="0" aria-label="' + attr(seg.name) + '"'
       + ' opacity="' + opacity + '"'
-      + ' style="transition: opacity 0.18s ease"/>';
-  });
-
-  // Hit areas follow the same allocation as the drawn arcs, so a tap always
-  // lands on the segment actually under the finger.
-  let hit = '';
-  cursor = 0;
-  drawable.forEach((seg, i) => {
-    const arc = arcs[i];
-    let dash = '';
-    if (drawable.length > 1) {
-      const len = Math.max(0.1, arc - GAP);
-      const start = cursor + GAP / 2;
-      dash = ' stroke-dasharray="' + len.toFixed(2) + ' ' + (C - len).toFixed(2)
-        + '" stroke-dashoffset="' + (-start).toFixed(2) + '"';
-    }
-    cursor += arc;
-    hit += '<circle data-key="' + attr(seg.key) + '" cx="' + cx + '" cy="' + cy
-      + '" r="' + r + '" fill="none" stroke="transparent" stroke-width="' + (sw + 26)
-      + '" stroke-linecap="butt"' + dash + ' transform="rotate(-90 ' + cx + ' ' + cy
-      + ')" tabindex="0" role="button" aria-label="' + attr(seg.name) + '"/>';
+      + ' style="transition: opacity 0.18s ease; cursor: pointer; outline: none"/>';
   });
 
   svgBox.innerHTML = '<svg width="' + size + '" height="' + size + '" viewBox="0 0 '
     + size + ' ' + size + '" role="group" aria-label="' + attr(t('timeDistribution')) + '">'
-    + paths + hit + '</svg>';
+    + paths + '</svg>';
   const center = el('div', 'donut-center');
   const topEl = el('div', 'dc-top');
   const subEl = el('div', 'dc-sub');
@@ -2783,16 +2813,16 @@ function donutChart(segments, opts) {
 
   const onPick = opts.onPick;
   function pick(key) {
-    const seg = segments.find((s) => s.key === key);
+    const seg = segments.find((item) => item.key === key);
     if (seg && onPick) onPick(seg);
   }
   svgBox.addEventListener('click', (ev) => {
-    const t2 = ev.target.closest ? ev.target.closest('circle[data-key]') : null;
+    const t2 = ev.target.closest ? ev.target.closest('path[data-key]') : null;
     if (t2) pick(t2.dataset.key);
   });
   svgBox.addEventListener('keydown', (ev) => {
     if (ev.key !== 'Enter' && ev.key !== ' ') return;
-    const t2 = ev.target.closest ? ev.target.closest('circle[data-key]') : null;
+    const t2 = ev.target.closest ? ev.target.closest('path[data-key]') : null;
     if (t2) { ev.preventDefault(); pick(t2.dataset.key); }
   });
 
@@ -3049,7 +3079,7 @@ function renderOverview(view) {
   hero.appendChild(el('span', 'hero-label', t('totalTime')));
   hero.appendChild(el('div', 'hero-value', fmtTime(total)));
   hero.appendChild(el('div', 'hero-meta',
-    insightsLabel() + ' · ' + sessionsMeta(evs.length) + ' · ' + activeDaysMeta(new Set(evs.map((e) => e.date)).size)));
+    sessionsMeta(evs.length) + ' · ' + activeDaysMeta(new Set(evs.map((e) => e.date)).size)));
   view.appendChild(hero);
 
   // Day range: the time-block timeline IS the trend
@@ -3067,7 +3097,15 @@ function renderOverview(view) {
 
   // Donut — interactive time distribution with ranked legend
   const dc = chartCard();
-  dc.appendChild(el('h3', 'chart-title', t('timeDistribution')));
+  const donutHead = el('div', 'chart-head');
+  donutHead.appendChild(el('span', 'chart-head-title', t('timeDistribution')));
+  if (sel) {
+    const reset = el('button', 'chip chip-reset chart-head-reset', t('allCategories') + ' ×');
+    reset.type = 'button';
+    reset.addEventListener('click', () => { analytics.selected = null; renderInsights(); });
+    donutHead.appendChild(reset);
+  }
+  dc.appendChild(donutHead);
   if (!segs.length) {
     dc.appendChild(chartEmpty());
   } else {
@@ -3114,10 +3152,6 @@ function renderOverview(view) {
     goBtn.type = 'button';
     goBtn.addEventListener('click', () => analyticsGo('category', { categoryKey: sel.key }));
     head.appendChild(goBtn);
-    const reset = el('button', 'chip chip-reset', t('allCategories') + ' ×');
-    reset.type = 'button';
-    reset.addEventListener('click', () => { analytics.selected = null; renderInsights(); });
-    head.appendChild(reset);
   } else {
     title.appendChild(document.createTextNode(t('topTasks')));
     head.appendChild(title);
@@ -3578,6 +3612,14 @@ function wireNavigation() {
   document.getElementById('btnAddDay').addEventListener('click', () => openEventSheet(null));
   document.getElementById('btnAddToday').addEventListener('click', () => openEventSheet(null, { date: todayISO() }));
   document.getElementById('insightsBack').addEventListener('click', analyticsBack);
+  const btnRefresh = document.getElementById('btnRefresh');
+  if (btnRefresh) {
+    btnRefresh.addEventListener('click', async () => {
+      await refreshEvents();
+      await refreshCategories();
+      refreshAll();
+    });
+  }
 }
 
 function wireImportFile() {
@@ -3605,6 +3647,9 @@ async function init() {
   const savedLang = await DataService.getSetting('lang');
   if (savedLang === 'zh' || savedLang === 'en') appLang = savedLang;
   document.documentElement.lang = appLang === 'zh' ? 'zh-CN' : 'en';
+  const savedTheme = await DataService.getSetting('theme');
+  applyTheme(savedTheme);
+  lastSyncAt = Date.now();
 
   buildWeekdayHeader();
   wireNavigation();
