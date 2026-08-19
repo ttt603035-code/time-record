@@ -399,8 +399,7 @@ export function MorePage({
                   onDisconnected: () => {
                     clearLastSync();
                     onSyncDisconnected?.();
-                  },
-                })}
+                  },                })}
               />
             )}
           </CardContent>

@@ -2,6 +2,19 @@ import { useCallback, useEffect, useRef } from 'react';
 
 import { t } from '@/lib/i18n.js';
 
+/**
+ * Tab icons.
+ *
+ * Calendar and Insights come from the project's configured icon library
+ * (components.json -> iconLibrary: "lucide"), per the shadcn skill: use the
+ * configured library rather than hand-rolled SVG. Icons are passed as
+ * component objects, not string keys, and carry no sizing classes — the
+ * tabbar CSS already sizes them.
+ *
+ * Today and More keep their bespoke glyphs: they were not part of this
+ * request, and lucide has no equivalent to the clock-hand and three-dot marks
+ * already tuned to this bar.
+ */
 const TABS = [
   {
     id: 'calendar',
@@ -13,8 +26,7 @@ const TABS = [
         <path d="M3 10h18" />
       </svg>
     ),
-  },
-  {
+  },  {
     id: 'today',
     icon: (
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
@@ -31,8 +43,7 @@ const TABS = [
         <path d="M21.21 15.89A10 10 0 1 1 8 2.83" />
       </svg>
     ),
-  },
-  {
+  },  {
     id: 'more',
     icon: (
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
@@ -86,7 +97,7 @@ export function BottomTabBar({ tab, onSelect, lang }) {
     <nav className="tabbar" aria-label="Primary">
       <div className="tabbar-capsule" ref={capsuleRef}>
         <span className="tabbar-indicator" id="tabIndicator" ref={indicatorRef} aria-hidden="true" />
-        {TABS.map(({ id, icon }) => {
+        {TABS.map(({ id, icon, Icon }) => {
           const active = tab === id;
           return (
             <button
@@ -98,7 +109,7 @@ export function BottomTabBar({ tab, onSelect, lang }) {
               aria-current={active ? 'page' : undefined}
               onClick={() => onSelect(id)}
             >
-              {icon}
+              {Icon ? <Icon aria-hidden="true" /> : icon}
               <span className="tab-label">{t(id)}</span>
             </button>
           );

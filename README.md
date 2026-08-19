@@ -126,12 +126,15 @@ every launch — page reload, Safari reopen, or a Shortcut that opens the URL �
 shows the same data. On iPhone, use Safari's **Share → Add to Home Screen** to
 install it with the icon generated from `IMG_7816.jpeg`.
 
-### Local-first and backend-ready
+### Local-first, with optional cloud sync
 
-The current version is fully local and needs **no backend**. Apple Shortcuts can
-import an event immediately by opening the URL described below. The architecture
-(UI → `DataService` → provider) remains shaped so Supabase can later replace
-`StorageService` without rewriting the UI.
+The app is fully local and needs **no backend**. Apple Shortcuts can import an
+event immediately by opening the URL described below.
+
+**Cloud Sync** (More → Cloud Sync) is opt-in: point it at a Supabase project you
+own and your events are mirrored there, so a second device can pick them up. It
+is off until you configure it, and turning it off changes nothing locally. See
+[Cloud Sync](#cloud-sync-可选云同步) for the setup.
 
 ## Controls
 
@@ -145,6 +148,66 @@ import an event immediately by opening the URL described below. The architecture
 - **More → Data** — export JSON, import JSON, clear all data + live storage-key list
 - **More → Event Templates** — add / edit / delete your categories (they feed the event form)
 - **More → Language** — English / 中文 interface switch (persisted)
+- **More → Cloud Sync** — optional Supabase mirror (set up, test, sync now, disconnect)
+
+## Cloud Sync (可选云同步)
+
+Off by default. Everything keeps working locally whether you turn it on or not.
+
+### 1. Create the table
+
+In your Supabase project, open **SQL Editor** and run the script shown under
+**More → Cloud Sync → Set up → Create the table** (there is a Copy button).
+It creates `public.events`, an index on `user_key`, and an RLS policy.
+
+### 2. Connect the app
+
+**More → Cloud Sync → Set up**, then fill in three fields:
+
+| Field | Where to find it |
+|---|---|
+| **Project URL** | Supabase → Settings → Data API → Project URL |
+| **Anon key** | Supabase → Settings → API Keys → `anon` `public` |
+| **Passphrase** | You invent it. Use the **same** one on every device. |
+
+**Save** tests the connection first and refuses to store a configuration that
+does not work — sync that looks enabled but is silently broken is worse than
+sync that is plainly off.
+
+### 3. Sync
+
+Tap **Sync now** on each device. Sync is manual on purpose: nothing leaves the
+device until you ask it to.
+
+### How conflicts are resolved
+
+Last-write-wins on each event's `updatedAt`:
+
+- an event only one side has → copied to the other
+- the same event edited on both → the more recent edit wins
+- identical timestamps → the local copy is kept and nothing is written
+
+**Deletions are not synced.** Without tombstones, "this row is missing" and
+"this row was deleted" look identical, and guessing wrong destroys data
+silently. So deleting an event on one device does not delete it elsewhere, and
+the next sync will copy it back from whichever device still has it. Clearing
+data stays a local, explicit action.
+
+### Security — read this before using it
+
+This setup has **no login**, so the anon key is the only credential, and an anon
+key shipped to a browser is public by definition. The policy in the setup script
+therefore lets **anyone holding that key read and write the table**. The
+passphrase namespaces your rows; it is *not* a security boundary, because
+someone with the key can query without it.
+
+That is a reasonable trade for a private hobby calendar in an obscure project.
+It is **not** appropriate for anything sensitive or shared. To get a real
+boundary, enable Supabase Auth and switch to the `auth.uid()` policy included as
+a comment at the end of the setup SQL.
+
+Credentials are stored under their own `calendar_sync_v1` key: **Clear all** does
+not sign you out, and an exported JSON file never contains your key.
 
 ## Insights (时间分析)
 
