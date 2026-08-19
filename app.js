@@ -691,14 +691,12 @@ const DataService = {
    last-write-wins rule, so the two front-ends can sync with each
    other through the same project.
 
-   The SDK is loaded from a CDN on first use only. This build has
-   no bundler, and a user who never opens the sync sheet should
-   never pay for the download.
+   The Pages build has no bundler, so this talks to PostgREST
+   with fetch instead of loading the Supabase JS SDK from a CDN.
    ============================================================ */
 
 const SYNC_KEY = 'calendar_sync_v1';
 const SYNC_TABLE = 'events';
-const SUPABASE_CDN = 'https://esm.sh/@supabase/supabase-js@2';
 
 const SyncService = (() => {
   function ls() {
@@ -712,19 +710,37 @@ const SyncService = (() => {
     }
   }
 
+  function stripWrap(s) {
+    return String(s || '').trim().replace(/^['"]+|['"]+$/g, '').trim();
+  }
+
   function normalizeConfig(cfg) {
-    return {
-      url: typeof cfg?.url === 'string' ? cfg.url.trim().replace(/\/+$/, '') : '',
-      anonKey: typeof cfg?.anonKey === 'string' ? cfg.anonKey.trim() : '',
-      userKey: typeof cfg?.userKey === 'string' ? cfg.userKey.trim() : '',
-    };
+    let url = typeof cfg?.url === 'string' ? stripWrap(cfg.url) : '';
+    let anonKey = typeof cfg?.anonKey === 'string' ? stripWrap(cfg.anonKey) : '';
+    const userKey = typeof cfg?.userKey === 'string' ? stripWrap(cfg.userKey) : '';
+    if (/^https:\/\//i.test(url)) {
+      try { url = new URL(url).origin; } catch (err) { /* keep trimmed */ }
+    } else {
+      url = url.replace(/\/+$/, '');
+    }
+    anonKey = anonKey.replace(/^Bearer\s+/i, '').trim();
+    return { url, anonKey, userKey };
   }
 
   function validateConfig(cfg) {
     const c = normalizeConfig(cfg);
     const errors = {};
     if (!c.url) errors.url = 'syncErrUrlEmpty';
-    else if (!/^https:\/\/[^\s/]+\.[^\s/]+/.test(c.url)) errors.url = 'syncErrUrlShape';
+    else {
+      try {
+        const u = new URL(c.url);
+        if (u.protocol !== 'https:') errors.url = 'syncErrUrlShape';
+        else if (/^(www\.)?supabase\.com$/i.test(u.hostname)) errors.url = 'syncErrUrlShape';
+        else if (!/^https:\/\/[^\s/]+\.[^\s/]+/.test(c.url)) errors.url = 'syncErrUrlShape';
+      } catch (err) {
+        errors.url = 'syncErrUrlShape';
+      }
+    }
     if (!c.anonKey) errors.anonKey = 'syncErrKeyEmpty';
     if (!c.userKey) errors.userKey = 'syncErrUserEmpty';
     return { ok: Object.keys(errors).length === 0, errors, config: c };
@@ -828,50 +844,76 @@ const SyncService = (() => {
   }
 
   function classifyError(err) {
-    const msg = String(err?.message || err || '');
-    const code = err?.code || '';
+    const status = err?.status || err?.statusCode || 0;
+    const msg = String(err?.message || err?.details || err || '');
+    const code = String(err?.code || '');
+    const blob = code + ' ' + msg;
+    if (status === 401 || status === 403) return { code: 'syncErrAuth', detail: msg };
     if (/Failed to fetch|NetworkError|ERR_NAME_NOT_RESOLVED|fetch failed/i.test(msg)) {
       return { code: 'syncErrNetwork', detail: msg };
     }
-    if (code === '42P01' || /relation .* does not exist|Could not find the table/i.test(msg)) {
+    if (code === '42P01' || code === 'PGRST205' || /relation .* does not exist|Could not find the table|schema cache/i.test(blob)) {
       return { code: 'syncErrNoTable', detail: msg };
     }
     if (code === '42501' || /row-level security|permission denied/i.test(msg)) {
       return { code: 'syncErrRls', detail: msg };
     }
-    if (/Invalid API key|JWT|apikey/i.test(msg)) return { code: 'syncErrAuth', detail: msg };
+    if (/Invalid API key|JWT|JWS|apikey/i.test(blob)) return { code: 'syncErrAuth', detail: msg };
     return { code: 'syncErrUnknown', detail: msg };
   }
 
-  let clientPromise = null;
-  let clientFor = '';
-
-  async function getClient(cfg) {
-    const fingerprint = cfg.url + '::' + cfg.anonKey;
-    if (clientPromise && clientFor === fingerprint) return clientPromise;
-    clientFor = fingerprint;
-    clientPromise = (async () => {
-      const mod = await import(SUPABASE_CDN);
-      return mod.createClient(cfg.url, cfg.anonKey, {
-        auth: { persistSession: false, autoRefreshToken: false },
-      });
-    })();
-    return clientPromise;
+  function syncFailText(res) {
+    const key = res && res.code ? res.code : 'syncErrUnknown';
+    const base = t(key);
+    if (key !== 'syncErrUnknown') return base;
+    const detail = String(res && res.detail || '').replace(/\s+/g, ' ').trim();
+    if (!detail) return base;
+    const clip = detail.length > 140 ? detail.slice(0, 137) + '…' : detail;
+    return base + ' — ' + clip;
   }
 
-  function resetClient() { clientPromise = null; clientFor = ''; }
+  function restHeaders(cfg, extra) {
+    return Object.assign({
+      apikey: cfg.anonKey,
+      Authorization: 'Bearer ' + cfg.anonKey,
+      Accept: 'application/json',
+      'Content-Type': 'application/json',
+    }, extra || {});
+  }
+
+  async function restJson(res) {
+    const text = await res.text();
+    if (!text) return null;
+    try { return JSON.parse(text); } catch (err) { return { message: text }; }
+  }
+
+  async function restThrowIfBad(res, body) {
+    if (res.ok) return;
+    const first = Array.isArray(body) ? body[0] : body;
+    const err = new Error(first && (first.message || first.error_description || first.error) || ('HTTP ' + res.status));
+    err.status = res.status;
+    err.code = first && first.code;
+    err.details = first && first.details;
+    throw err;
+  }
+
+  function resetClient() { /* REST has no memoised SDK client */ }
 
   async function testConnection(rawConfig) {
     const { ok, errors, config } = validateConfig(rawConfig);
-    if (!ok) return { ok: false, code: Object.values(errors)[0] };
+    if (!ok) return { ok: false, code: Object.values(errors)[0], detail: '' };
     try {
-      const supabase = await getClient(config);
-      const { error, count } = await supabase
-        .from(SYNC_TABLE)
-        .select('id', { count: 'exact', head: true })
-        .eq('user_key', config.userKey);
-      if (error) throw error;
-      return { ok: true, count: count || 0 };
+      const qs = 'select=id&user_key=eq.' + encodeURIComponent(config.userKey) + '&limit=0';
+      const res = await fetch(config.url + '/rest/v1/' + SYNC_TABLE + '?' + qs, {
+        method: 'GET',
+        headers: restHeaders(config, { Prefer: 'count=exact' }),
+      });
+      const body = await restJson(res);
+      await restThrowIfBad(res, body);
+      const range = res.headers.get('content-range') || '';
+      const total = range.split('/')[1];
+      const count = total && total !== '*' ? Number(total) : 0;
+      return { ok: true, count: Number.isFinite(count) ? count : 0 };
     } catch (err) {
       return { ok: false, ...classifyError(err) };
     }
@@ -879,24 +921,28 @@ const SyncService = (() => {
 
   async function syncNow(localEvents, rawConfig) {
     const { ok, errors, config } = validateConfig(rawConfig || loadConfig() || {});
-    if (!ok) return { ok: false, code: Object.values(errors)[0] };
+    if (!ok) return { ok: false, code: Object.values(errors)[0], detail: '' };
     try {
-      const supabase = await getClient(config);
-      const { data, error } = await supabase
-        .from(SYNC_TABLE)
-        .select('*')
-        .eq('user_key', config.userKey);
-      if (error) throw error;
+      const qs = 'select=*&user_key=eq.' + encodeURIComponent(config.userKey);
+      const res = await fetch(config.url + '/rest/v1/' + SYNC_TABLE + '?' + qs, {
+        method: 'GET',
+        headers: restHeaders(config),
+      });
+      const body = await restJson(res);
+      await restThrowIfBad(res, body);
 
-      const remote = (data || []).map(fromRow);
+      const remote = (Array.isArray(body) ? body : []).map(fromRow);
       const { merged, toPush, toPull } = mergeEvents(localEvents, remote);
 
       if (toPush.length) {
         const rows = toPush.map((ev) => toRow(ev, config.userKey));
-        const { error: upErr } = await supabase
-          .from(SYNC_TABLE)
-          .upsert(rows, { onConflict: 'id' });
-        if (upErr) throw upErr;
+        const up = await fetch(config.url + '/rest/v1/' + SYNC_TABLE + '?on_conflict=id', {
+          method: 'POST',
+          headers: restHeaders(config, { Prefer: 'resolution=merge-duplicates,return=minimal' }),
+          body: JSON.stringify(rows),
+        });
+        const upBody = await restJson(up);
+        await restThrowIfBad(up, upBody);
       }
 
       return {
@@ -938,7 +984,7 @@ const SyncService = (() => {
 
   return {
     loadConfig, saveConfig, clearConfig, isConfigured, validateConfig,
-    toRow, fromRow, mergeEvents, classifyError,
+    toRow, fromRow, mergeEvents, classifyError, syncFailText,
     testConnection, syncNow, resetClient,
     loadLastSync, saveLastSync, clearLastSync,
   };
@@ -1002,6 +1048,7 @@ create index if not exists events_user_key_idx
 
 alter table public.events enable row level security;
 
+drop policy if exists "anon full access" on public.events;
 create policy "anon full access" on public.events
   for all to anon
   using (true)
@@ -2109,7 +2156,7 @@ function openSyncSettings() {
     setStatus(true, t('syncTesting'));
     const res = await SyncService.testConnection(config);
     if (res.ok) { setStatus(true, t('syncOkFound', { n: res.count })); return config; }
-    setStatus(false, t(res.code));
+    setStatus(false, SyncService.syncFailText(res));
     return null;
   }
 

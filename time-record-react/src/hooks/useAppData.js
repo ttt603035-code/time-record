@@ -10,7 +10,7 @@ import { toast } from '@/lib/overlays.js';
 import { DEFAULT_THEME, applyTheme } from '@/lib/themes.js';
 import { openSyncSettings } from '@/components/SyncSettingsModal.jsx';
 import {
-  clearLastSync, isConfigured, loadConfig, loadLastSync, saveLastSync, syncNow,
+  clearLastSync, isConfigured, loadConfig, loadLastSync, saveLastSync, syncFailText, syncNow,
 } from '@/lib/supabase-sync.js';
 
 /**
@@ -166,7 +166,7 @@ export function useAppData() {
       const local = await DataService.exportAll();
       const res = await syncNow(local, loadConfig());
       if (!res.ok) {
-        toast(t(res.code));
+        toast(syncFailText(res, t));
         return;
       }
       if (res.pulled > 0) {
