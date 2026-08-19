@@ -17,7 +17,7 @@ import { el } from '@/lib/dom.js';
 import { t } from '@/lib/i18n.js';
 import { openStudyModal, toast } from '@/lib/overlays.js';
 import {
-  SETUP_SQL, clearConfig, loadConfig, resetClient, saveConfig, testConnection,
+  SETUP_SQL, clearConfig, loadConfig, resetClient, saveConfig, syncFailText, testConnection,
 } from '@/lib/supabase-sync.js';
 import { validateConfig } from '@/lib/sync-core.js';
 import { cn } from '@/lib/utils.js';
@@ -106,7 +106,7 @@ function SyncSettings({ onSaved, onDisconnected, close }) {
     setBusy(false);
     setResult(res.ok
       ? { ok: true, message: t('syncOkFound', { n: res.count }) }
-      : { ok: false, message: t(res.code) });
+      : { ok: false, message: syncFailText(res, t) });
     return res.ok ? config : null;
   };
 

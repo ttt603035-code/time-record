@@ -115,10 +115,20 @@ export function mergeEvents(localList, remoteList) {
 }
 
 /** Trim and validate what the user typed into the settings sheet. */
+function stripWrap(s) {
+  return String(s || '').trim().replace(/^['"]+|['"]+$/g, '').trim();
+}
+
 export function normalizeConfig(cfg) {
-  const url = typeof cfg?.url === 'string' ? cfg.url.trim().replace(/\/+$/, '') : '';
-  const anonKey = typeof cfg?.anonKey === 'string' ? cfg.anonKey.trim() : '';
-  const userKey = typeof cfg?.userKey === 'string' ? cfg.userKey.trim() : '';
+  let url = typeof cfg?.url === 'string' ? stripWrap(cfg.url) : '';
+  let anonKey = typeof cfg?.anonKey === 'string' ? stripWrap(cfg.anonKey) : '';
+  const userKey = typeof cfg?.userKey === 'string' ? stripWrap(cfg.userKey) : '';
+  if (/^https:\/\//i.test(url)) {
+    try { url = new URL(url).origin; } catch { /* keep trimmed */ }
+  } else {
+    url = url.replace(/\/+$/, '');
+  }
+  anonKey = anonKey.replace(/^Bearer\s+/i, '').trim();
   return { url, anonKey, userKey };
 }
 
@@ -130,7 +140,16 @@ export function validateConfig(cfg) {
   const { url, anonKey, userKey } = normalizeConfig(cfg);
   const errors = {};
   if (!url) errors.url = 'syncErrUrlEmpty';
-  else if (!/^https:\/\/[^\s/]+\.[^\s/]+/.test(url)) errors.url = 'syncErrUrlShape';
+  else {
+    try {
+      const u = new URL(url);
+      if (u.protocol !== 'https:') errors.url = 'syncErrUrlShape';
+      else if (/^(www\.)?supabase\.com$/i.test(u.hostname)) errors.url = 'syncErrUrlShape';
+      else if (!/^https:\/\/[^\s/]+\.[^\s/]+/.test(url)) errors.url = 'syncErrUrlShape';
+    } catch {
+      errors.url = 'syncErrUrlShape';
+    }
+  }
   if (!anonKey) errors.anonKey = 'syncErrKeyEmpty';
   if (!userKey) errors.userKey = 'syncErrUserEmpty';
   return { ok: Object.keys(errors).length === 0, errors, config: { url, anonKey, userKey } };

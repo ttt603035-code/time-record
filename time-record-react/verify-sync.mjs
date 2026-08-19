@@ -133,11 +133,17 @@ check('http:// is rejected', validateConfig({ ...good, url: 'http://x.co' }).err
 check('Garbage URL is rejected', validateConfig({ ...good, url: 'not a url' }).errors.url === 'syncErrUrlShape');
 check('Empty key is rejected', validateConfig({ ...good, anonKey: '' }).errors.anonKey === 'syncErrKeyEmpty');
 check('Empty passphrase is rejected', validateConfig({ ...good, userKey: '' }).errors.userKey === 'syncErrUserEmpty');
+check('Dashboard host is rejected',
+  validateConfig({ ...good, url: 'https://supabase.com/dashboard/project/x' }).errors.url === 'syncErrUrlShape');
+check('REST path collapses to origin',
+  validateConfig({ ...good, url: 'https://abc.supabase.co/rest/v1/events' }).config.url === 'https://abc.supabase.co');
+check('Bearer prefix is stripped',
+  validateConfig({ ...good, anonKey: 'Bearer eyJhbGciOiJI' }).config.anonKey === 'eyJhbGciOiJI');
 check('Key is masked for display', maskKey('eyJhbGciOiJIUzI1NiJ9') === 'eyJhbG…Nps9'.replace('Nps9', 'NiJ9'));
 
 /* ── Transport against a fake Supabase ──────────────────────── */
 
-const { classifyError } = await import('./src/lib/supabase-sync.js');
+const { classifyError, syncFailText } = await import('./src/lib/supabase-sync.js');
 
 check('Network failure is classified',
   classifyError(new Error('Failed to fetch')).code === 'syncErrNetwork');
@@ -149,6 +155,13 @@ check('Bad key is classified',
   classifyError(new Error('Invalid API key')).code === 'syncErrAuth');
 check('Unknown error still returns a code',
   classifyError(new Error('boom')).code === 'syncErrUnknown');
+check('JWS is classified as auth',
+  classifyError(new Error('JWSError JWSInvalidSignature')).code === 'syncErrAuth');
+check('PGRST205 is classified as missing table',
+  classifyError({ code: 'PGRST205', message: 'Could not find the table in the schema cache' }).code === 'syncErrNoTable');
+check('Unknown fail text includes detail',
+  syncFailText({ code: 'syncErrUnknown', detail: 'timeout from edge' }, (k) => (k === 'syncErrUnknown' ? 'Sync failed' : k))
+    .includes('timeout from edge'));
 
 /* A stand-in for the SDK: records what the client would have sent. */
 function fakeSupabase(remoteRows, { failOn } = {}) {
