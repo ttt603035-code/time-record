@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react';
 
+import { SyncActions } from '@/components/SyncActions.jsx';
 import { InsightsPickerSheet } from '@/components/InsightsPickerSheet.jsx';
 import { PeriodSelector } from '@/components/insights/PeriodSelector.jsx';
 import { RangeSegments } from '@/components/insights/RangeSegments.jsx';
@@ -31,6 +32,8 @@ export function InsightsPage({
   onGo,
   onBack,
   onEditEvent,
+  lastSyncAt,
+  onRefresh,
 }) {
   const [pickerOpen, setPickerOpen] = useState(false);
 
@@ -39,12 +42,15 @@ export function InsightsPage({
     return categoryAgg(periodEvents, categories).find((s) => s.key === route.category);
   }, [route, periodEvents, categories]);
 
-  const viewClass = `insights-view${dir === 'push' ? ' view-push' : dir === 'pop' ? ' view-pop' : ''}`;
+  const viewClass = 'insights-view';
 
   return (
     <main className="screen is-active" id="screen-insights" aria-label="Insights">
       <header className="topbar">
         <h1 className="page-title">{t('insights')}</h1>
+        <div className="topbar-end">
+          <SyncActions lastCloudSync={lastCloudSync} syncOn={syncOn} syncBusy={syncBusy} onSync={onSync} />
+        </div>
       </header>
 
       {/* Drill-down navigation: Overview → Category → Task */}

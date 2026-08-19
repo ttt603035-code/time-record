@@ -1,5 +1,4 @@
 import { useCallback, useEffect, useRef } from 'react';
-import { CalendarDays, ChartPie } from 'lucide-react';
 
 import { t } from '@/lib/i18n.js';
 
@@ -17,24 +16,40 @@ import { t } from '@/lib/i18n.js';
  * already tuned to this bar.
  */
 const TABS = [
-  { id: 'calendar', Icon: CalendarDays },
   {
+    id: 'calendar',
+    icon: (
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+        <path d="M8 2v4" />
+        <path d="M16 2v4" />
+        <rect width="18" height="18" x="3" y="4" rx="2" />
+        <path d="M3 10h18" />
+      </svg>
+    ),
+  },  {
     id: 'today',
     icon: (
-      <svg viewBox="0 0 24 24" aria-hidden="true">
-        <circle cx="12" cy="12" r="8.5" fill="none" stroke="currentColor" strokeWidth="1.8" />
-        <path d="M12 7.5V12l3 2" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+        <circle cx="12" cy="12" r="10" />
+        <polyline points="12 6 12 12 16 14" />
       </svg>
     ),
   },
-  { id: 'insights', Icon: ChartPie },
   {
+    id: 'insights',
+    icon: (
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+        <path d="M21 12c.552 0 1.005-.449.95-.998a10 10 0 0 0-8.953-8.951c-.55-.055-.998.398-.998.95v8a1 1 0 0 0 1 1z" />
+        <path d="M21.21 15.89A10 10 0 1 1 8 2.83" />
+      </svg>
+    ),
+  },  {
     id: 'more',
     icon: (
-      <svg viewBox="0 0 24 24" aria-hidden="true">
-        <circle cx="5.5" cy="12" r="1.5" fill="currentColor" />
-        <circle cx="12" cy="12" r="1.5" fill="currentColor" />
-        <circle cx="18.5" cy="12" r="1.5" fill="currentColor" />
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+        <circle cx="12" cy="12" r="1" />
+        <circle cx="19" cy="12" r="1" />
+        <circle cx="5" cy="12" r="1" />
       </svg>
     ),
   },

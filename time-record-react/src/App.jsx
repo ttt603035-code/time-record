@@ -31,6 +31,7 @@ export default function App() {
     createEvent, updateEvent, removeEvent,
     saveCategories, clearAll, applyLanguage,
     theme, applyTheme,
+    lastCloudSync, syncOn, syncBusy, setSyncOn, setLastCloudSync, runCloudSync,
     refreshEvents, refreshCategories,
   } = useAppData();
 
@@ -96,14 +97,6 @@ export default function App() {
     setViewMonth(m);
   }, []);
 
-  const handleGoToday = useCallback(() => {
-    const n = new Date();
-    setViewYear(n.getFullYear());
-    setViewMonth(n.getMonth());
-    setSelectedDate(todayISO());
-    setTab('calendar');
-  }, []);
-
   /* ── Tab switching ── */
   const handleTab = useCallback((next) => {
     // Tapping the active Insights tab again pops the drill-down back to the
@@ -130,9 +123,12 @@ export default function App() {
           onSelectDate={handleSelectDate}
           onChangeMonth={handleChangeMonth}
           onSetMonth={handleSetMonth}
-          onGoToday={handleGoToday}
           onAddEvent={handleAddEvent}
           onEditEvent={handleEditEvent}
+          lastCloudSync={lastCloudSync}
+          syncOn={syncOn}
+          syncBusy={syncBusy}
+          onSync={runCloudSync}
         />
       ) : null}
 
@@ -141,6 +137,10 @@ export default function App() {
           events={events}
           onAddEvent={handleAddEvent}
           onEditEvent={handleEditEvent}
+          lastCloudSync={lastCloudSync}
+          syncOn={syncOn}
+          syncBusy={syncBusy}
+          onSync={runCloudSync}
         />
       ) : null}
 
@@ -161,6 +161,10 @@ export default function App() {
             onGo={analytics.go}
             onBack={analytics.back}
             onEditEvent={handleEditEvent}
+            lastCloudSync={lastCloudSync}
+            syncOn={syncOn}
+            syncBusy={syncBusy}
+            onSync={runCloudSync}
           />
         </Suspense>
       ) : null}
@@ -171,6 +175,12 @@ export default function App() {
           categories={categories}
           lang={lang}
           theme={theme}
+          lastCloudSync={lastCloudSync}
+          syncOn={syncOn}
+          syncBusy={syncBusy}
+          onSync={runCloudSync}
+          onSyncSaved={() => setSyncOn(true)}
+          onSyncDisconnected={() => { setSyncOn(false); setLastCloudSync(null); }}
           onSaveCategories={saveCategories}
           onClearAll={clearAll}
           onApplyLanguage={applyLanguage}

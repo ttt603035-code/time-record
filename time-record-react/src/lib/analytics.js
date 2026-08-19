@@ -16,7 +16,7 @@
               → Sessions (the events themselves)
    ============================================================ */
 
-import { EVENT_COLORS, MONTHS_SHORT, MONTHS_LONG } from './constants.js';
+import { EVENT_COLORS, MONTHS_SHORT, MONTHS_LONG, resolveColor } from './constants.js';
 import {
   pad2, isoDate, parseISO, daysInMonth, addDaysISO, toMinutes,
 } from './date.js';
@@ -86,8 +86,8 @@ export function shiftedInsights(insights, dir) {
 
 export function catColorOf(name, eColor, categories) {
   const cat = (categories || []).find((c) => c.name === name);
-  if (cat) return EVENT_COLORS[cat.color] || EVENT_COLORS.blue;
-  return EVENT_COLORS[eColor] || '#D1D1D6';
+  if (cat) return resolveColor(cat.color);
+  return resolveColor(eColor);
 }
 
 export function uncategorizedName() {

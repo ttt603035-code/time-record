@@ -32,7 +32,7 @@ export const EVENT_COLORS = {
   pink: '#F0A3B6',
   green: '#86C79B',
   orange: '#F1B973',
-  // Added: the rest of the Apple system palette, softened to match.
+  // Added: muted pastels so templates do not collide.
   red: '#E58B84',
   yellow: '#E8C468',
   mint: '#7FCFC4',
@@ -41,12 +41,42 @@ export const EVENT_COLORS = {
   indigo: '#8E93D8',
   brown: '#C0A188',
   gray: '#A9A9AF',
+  peach: '#F2C4A6',
+  coral: '#E9A39C',
+  blush: '#E8B5C4',
+  lilac: '#C5B6DC',
+  mauve: '#B8A3C0',
+  sky: '#A7C8DC',
+  seafoam: '#9DCFC4',
+  sage: '#A8C4A6',
+  sand: '#D4C4A4',
+  gold: '#D8C48A',
+  wine: '#C49098',
+  slate: '#A8B0B8',
 };
 export const COLOR_ORDER = [
-  'blue', 'cyan', 'teal', 'mint', 'green',
-  'yellow', 'orange', 'red', 'pink', 'purple',
-  'indigo', 'brown', 'gray',
+  'blue', 'sky', 'cyan', 'teal', 'seafoam', 'mint', 'green', 'sage',
+  'gold', 'yellow', 'sand', 'orange', 'peach', 'coral', 'red', 'wine',
+  'blush', 'pink', 'mauve', 'purple', 'lilac', 'indigo', 'brown', 'slate', 'gray',
 ];
+
+const HEX_COLOR = /^#[0-9A-Fa-f]{6}$/;
+
+export function resolveColor(c) {
+  if (EVENT_COLORS[c]) return EVENT_COLORS[c];
+  if (typeof c === 'string' && HEX_COLOR.test(c)) return c.toUpperCase();
+  return EVENT_COLORS.blue;
+}
+
+export function normalizeColorValue(c) {
+  if (EVENT_COLORS[c]) return c;
+  if (typeof c === 'string' && HEX_COLOR.test(c)) return c.toUpperCase();
+  return 'blue';
+}
+
+export function isCustomColor(c) {
+  return typeof c === 'string' && HEX_COLOR.test(c);
+}
 
 export const ITEM_H = 40; // wheel picker item height (px)
 

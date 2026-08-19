@@ -47,7 +47,7 @@ export function Overview({
         <span className="hero-label">{t('totalTime')}</span>
         <div className="hero-value">{fmtTime(total)}</div>
         <div className="hero-meta">
-          {`${insightsLabel(range)} · ${sessionsMeta(events.length)} · ${activeDaysMeta(new Set(events.map((e) => e.date)).size)}`}
+          {`${sessionsMeta(events.length)} · ${activeDaysMeta(new Set(events.map((e) => e.date)).size)}`}
         </div>
       </section>
 

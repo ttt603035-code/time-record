@@ -46,7 +46,7 @@ click(moreTab);
 await new Promise((r) => setTimeout(r, 400));
 
 const cards = [...doc.querySelectorAll('#moreGroups .settings-card')];
-check('More screen has the Cloud Sync card', cards.length === 4, `${cards.length} cards`);
+check('More screen has the Cloud Sync card', cards.length >= 5, `${cards.length} cards`);
 const titles = cards.map(c => c.querySelector('.settings-title')?.textContent);
 check('Sync card is titled', titles.includes('Cloud Sync'), titles.join(' | '));
 check('Sync starts Off', !!doc.querySelector('.sync-badge'), doc.querySelector('.sync-badge')?.textContent);

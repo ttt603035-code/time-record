@@ -36,8 +36,62 @@ const EVENT_COLORS = {
   pink: '#F0A3B6',
   green: '#86C79B',
   orange: '#F1B973',
+  red: '#E58B84',
+  yellow: '#E8C468',
+  mint: '#7FCFC4',
+  teal: '#7BBFD4',
+  cyan: '#84C2E8',
+  indigo: '#8E93D8',
+  brown: '#C0A188',
+  gray: '#A9A9AF',
+  peach: '#F2C4A6',
+  coral: '#E9A39C',
+  blush: '#E8B5C4',
+  lilac: '#C5B6DC',
+  mauve: '#B8A3C0',
+  sky: '#A7C8DC',
+  seafoam: '#9DCFC4',
+  sage: '#A8C4A6',
+  sand: '#D4C4A4',
+  gold: '#D8C48A',
+  wine: '#C49098',
+  slate: '#A8B0B8',
 };
-const COLOR_ORDER = ['blue', 'purple', 'pink', 'green', 'orange'];
+const COLOR_ORDER = [
+  'blue', 'sky', 'cyan', 'teal', 'seafoam', 'mint', 'green', 'sage',
+  'gold', 'yellow', 'sand', 'orange', 'peach', 'coral', 'red', 'wine',
+  'blush', 'pink', 'mauve', 'purple', 'lilac', 'indigo', 'brown', 'slate', 'gray',
+];
+const HEX_COLOR = /^#[0-9A-Fa-f]{6}$/;
+function resolveColor(c) {
+  if (EVENT_COLORS[c]) return EVENT_COLORS[c];
+  if (typeof c === 'string' && HEX_COLOR.test(c)) return c.toUpperCase();
+  return EVENT_COLORS.blue;
+}
+function normalizeColorValue(c) {
+  if (EVENT_COLORS[c]) return c;
+  if (typeof c === 'string' && HEX_COLOR.test(c)) return c.toUpperCase();
+  return 'blue';
+}
+
+function appendNativeColorSwatch(swatches, draft, setSwatchColor) {
+  const wrap = el('label', 'swatch swatch-custom');
+  wrap.setAttribute('aria-label', t('pickColor'));
+  const customOn = HEX_COLOR.test(draft.color);
+  wrap.dataset.color = customOn ? draft.color : '__custom__';
+  if (customOn) wrap.classList.add('is-selected');
+  wrap.setAttribute('aria-pressed', String(customOn));
+  const input = document.createElement('input');
+  input.type = 'color';
+  input.value = resolveColor(draft.color);
+  input.addEventListener('input', () => {
+    draft.color = normalizeColorValue(input.value);
+    wrap.dataset.color = draft.color;
+    setSwatchColor(draft.color);
+  });
+  wrap.appendChild(input);
+  swatches.appendChild(wrap);
+}
 
 const ITEM_H = 40; // wheel picker item height (px)
 
@@ -62,6 +116,12 @@ const I18N = {
     eventTemplates: 'Event Templates', templatesDefined: '%n defined',
     storage: 'Storage', onThisDevice: 'On this device', limitedPreview: 'Limited (preview)',
     aboutCalendar: 'About Calendar', version: 'v1.0',
+    language: 'Language', languageDesc: 'Switch the interface language.',
+    appearance: 'Appearance',
+    appearanceDesc: 'Tints buttons, links and the selected day. Event colours are unchanged.',
+    themeGraphite: 'Graphite', themeBlue: 'Blue', themeSage: 'Sage',
+    themeClay: 'Clay', themeLavender: 'Lavender', themeRose: 'Rose',
+    syncChip: 'Sync', refresh: 'Refresh',
     sync: 'Cloud Sync',
     syncDesc: 'Optionally mirror your events to your own Supabase project.',
     syncOff: 'Off', syncOn: 'On', syncSetUp: 'Set up', syncSettings: 'Settings',
@@ -91,9 +151,11 @@ const I18N = {
     syncErrRls: 'Blocked by row-level security — check the table policy',
     syncErrAuth: 'The anon key was rejected',
     syncErrUnknown: 'Sync failed',
-    language: 'Language', languageDesc: 'Switch the interface language.',
+    lastExportNever: 'Not exported yet',
+    lastExport: 'Last exported %s',
+    pickColor: 'More colours',
     english: 'English', chinese: '中文',
-    cancel: 'Cancel', done: 'Done', save: 'Save', add: 'Add', delete: 'Delete', clear: 'Clear',
+    cancel: 'Cancel', close: 'Close', done: 'Done', save: 'Save', add: 'Add', delete: 'Delete', clear: 'Clear',
     addEvent: 'Add Event', newEvent: 'New Event', editEvent: 'Edit Event',
     title: 'Title', date: 'Date', start: 'Start', end: 'End', category: 'Category', color: 'Color', note: 'Note',
     titlePlaceholder: 'e.g. CET-6 Reading', categoryPlaceholder: 'e.g. English', notePlaceholder: 'Optional',
@@ -139,6 +201,12 @@ const I18N = {
     eventTemplates: '日程模板', templatesDefined: '已定义 %n 个',
     storage: '存储', onThisDevice: '此设备', limitedPreview: '受限（预览）',
     aboutCalendar: '关于 Calendar', version: 'v1.0',
+    language: '语言', languageDesc: '切换界面语言。',
+    appearance: '主题',
+    appearanceDesc: '影响按钮、链接和选中日期的颜色。分类颜色不受影响。',
+    themeGraphite: '石墨', themeBlue: '雾蓝', themeSage: '鼠尾草',
+    themeClay: '陶土', themeLavender: '薰衣草', themeRose: '玫瑰',
+    syncChip: '同步', refresh: '刷新',
     sync: '云同步',
     syncDesc: '可选：把日程同步到你自己的 Supabase 项目。',
     syncOff: '未开启', syncOn: '已连接', syncSetUp: '设置', syncSettings: '设置',
@@ -168,9 +236,11 @@ const I18N = {
     syncErrRls: '被行级安全策略拦截 — 请检查表的 policy',
     syncErrAuth: 'Anon key 被拒绝',
     syncErrUnknown: '同步失败',
-    language: '语言', languageDesc: '切换界面语言。',
+    lastExportNever: '尚未导出',
+    lastExport: '上次导出 %s',
+    pickColor: '更多颜色',
     english: 'English', chinese: '中文',
-    cancel: '取消', done: '完成', save: '保存', add: '添加', delete: '删除', clear: '清空',
+    cancel: '取消', close: '关闭', done: '完成', save: '保存', add: '添加', delete: '删除', clear: '清空',
     addEvent: '添加日程', newEvent: '新建日程', editEvent: '编辑日程',
     title: '标题', date: '日期', start: '开始', end: '结束', category: '分类', color: '颜色', note: '备注',
     titlePlaceholder: '例如：CET-6 阅读', categoryPlaceholder: '例如：英语', notePlaceholder: '可选',
@@ -239,6 +309,12 @@ function formatShortDate(iso) {
    ============================================================ */
 
 const pad2 = (n) => String(n).padStart(2, '0');
+
+function formatSyncClock(ms) {
+  const n = new Date(ms || Date.now());
+  return pad2(n.getHours()) + ':' + pad2(n.getMinutes());
+}
+
 
 function isoDate(y, m, d) {
   return y + '-' + pad2(m + 1) + '-' + pad2(d);
@@ -323,7 +399,7 @@ function normalizeEvent(e) {
     endTime: validTime(e.endTime) ? e.endTime : '10:00',
     title: (typeof e.title === 'string' && e.title.trim()) ? e.title.trim() : 'Untitled',
     category: typeof e.category === 'string' ? e.category : '',
-    color: EVENT_COLORS[e.color] ? e.color : 'blue',
+    color: normalizeColorValue(e.color),
     note: typeof e.note === 'string' ? e.note : '',
     createdAt: typeof e.createdAt === 'string' ? e.createdAt : now,
     updatedAt: typeof e.updatedAt === 'string' ? e.updatedAt : now,
@@ -358,7 +434,7 @@ function normalizeCategory(c) {
   return {
     id: (typeof c.id === 'string' && c.id) ? c.id : 'cat_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6),
     name: (typeof c.name === 'string' && c.name.trim()) ? c.name.trim() : 'Untitled',
-    color: EVENT_COLORS[c.color] ? c.color : 'blue',
+    color: normalizeColorValue(c.color),
   };
 }
 
@@ -936,6 +1012,32 @@ create policy "anon full access" on public.events
    ============================================================ */
 
 let appLang = 'en'; // 'en' | 'zh'
+let appTheme = 'graphite';
+let lastSyncAt = Date.now();
+let syncBusy = false;
+let syncedAt = null;
+const EXPORT_AT_KEY = 'calendar_export_at_v1';
+
+const DEFAULT_THEME = 'graphite';
+const THEMES = [
+  { id: 'graphite', labelKey: 'themeGraphite', accent: '#1D1D1F', swatch: '#1D1D1F' },
+  { id: 'blue', labelKey: 'themeBlue', accent: '#5B8DBE', swatch: '#5B8DBE' },
+  { id: 'sage', labelKey: 'themeSage', accent: '#6FA88C', swatch: '#6FA88C' },
+  { id: 'clay', labelKey: 'themeClay', accent: '#C08A6E', swatch: '#C08A6E' },
+  { id: 'lavender', labelKey: 'themeLavender', accent: '#9186C4', swatch: '#9186C4' },
+  { id: 'rose', labelKey: 'themeRose', accent: '#C4808F', swatch: '#C4808F' },
+];
+
+function applyTheme(id) {
+  const theme = THEMES.find((x) => x.id === id) ? id : DEFAULT_THEME;
+  appTheme = theme;
+  const root = document.documentElement;
+  if (theme === DEFAULT_THEME) root.removeAttribute('data-theme');
+  else root.setAttribute('data-theme', theme);
+  return theme;
+}
+
+
 
 const state = {
   viewYear: new Date().getFullYear(),
@@ -989,6 +1091,7 @@ const I = {
   info: '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" stroke-width="2"/><path d="M12 11v5" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><path d="M12 8h.01" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"/></svg>',
   pencil: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15.5 5.5l3 3L8 19H5v-3L15.5 5.5z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/><path d="M12.8 8.2l3 3" fill="none" stroke="currentColor" stroke-width="1.8"/></svg>',
   tag: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 4h7.2a1 1 0 0 1 .7.3l8.8 8.8a1 1 0 0 1 0 1.4l-5.2 5.2a1 1 0 0 1-1.4 0l-8.8-8.8a1 1 0 0 1-.3-.7V4z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/><circle cx="9.5" cy="9.5" r="1.3" fill="currentColor"/></svg>',
+  refresh: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12a9 9 0 1 1-9-9c2.52 0 4.93 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/></svg>',
 };
 
 const ICON_CALENDAR_EMPTY = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="3.5" y="5" width="17" height="15.5" rx="3.5"/><path d="M3.5 9.5h17"/><path d="M8.2 2.8v3.4M15.8 2.8v3.4"/></svg>';
@@ -1547,7 +1650,7 @@ function renderCalendarGrid() {
     const colors = [...new Set(evs.map((e) => e.color))].slice(0, 3);
     colors.forEach((col) => {
       const dot = el('i');
-      dot.style.setProperty('--dot', EVENT_COLORS[col] || EVENT_COLORS.blue);
+      dot.style.setProperty('--dot', resolveColor(col));
       dots.appendChild(dot);
     });
     btn.appendChild(dots);
@@ -1709,7 +1812,7 @@ function eventCard(e) {
   btn.setAttribute('aria-label', e.title + ', ' + e.startTime + ' to ' + e.endTime + (e.category ? ', ' + e.category : ''));
 
   const accent = el('span', 'event-accent');
-  accent.style.setProperty('--c', EVENT_COLORS[e.color] || EVENT_COLORS.blue);
+  accent.style.setProperty('--c', resolveColor(e.color));
 
   const time = el('span', 'event-time');
   time.appendChild(el('span', 't-start', e.startTime));
@@ -1860,11 +1963,22 @@ function settingsRow({ icon, label, value, onClick }) {
   return b;
 }
 
-/* ── Cloud Sync card + settings sheet ───────────────────────── */
+function loadLastExport() {
+  try {
+    const raw = window.localStorage.getItem(EXPORT_AT_KEY);
+    return (raw && !Number.isNaN(Date.parse(raw))) ? raw : null;
+  } catch (err) { return null; }
+}
 
-let syncBusy = false;
-let syncedAt = null;
+function saveLastExport(iso) {
+  try { window.localStorage.setItem(EXPORT_AT_KEY, iso); return true; }
+  catch (err) { return false; }
+}
 
+function formatExportTime(iso) {
+  if (!iso) return t('lastExportNever');
+  return t('lastExport', { s: formatSyncTime(iso) });
+}
 function syncStatusLine() {
   if (!SyncService.isConfigured()) return t('syncDesc');
   const cfg = SyncService.loadConfig();
@@ -1875,8 +1989,13 @@ function syncStatusLine() {
 }
 
 async function runSync() {
+  if (!SyncService.isConfigured()) {
+    openSyncSettings();
+    return;
+  }
   if (syncBusy) return;
   syncBusy = true;
+  renderSyncChip();
   renderMoreScreen();
   try {
     const local = await DataService.exportAll();
@@ -1888,6 +2007,7 @@ async function runSync() {
     }
     syncedAt = res.syncedAt;
     SyncService.saveLastSync(res.syncedAt);
+    lastSyncAt = Date.parse(res.syncedAt) || Date.now();
     toast(res.pushed || res.pulled
       ? t('syncDone', { u: res.pushed, d: res.pulled })
       : t('syncNoChanges'));
@@ -1896,32 +2016,6 @@ async function runSync() {
     refreshAll();
   }
 }
-
-/* Top-right chip: how long ago the last sync was, without scrolling to the
-   card. Tapping it syncs. */
-function renderSyncChip() {
-  const chip = document.getElementById('syncChip');
-  if (!chip) return;
-  const on = SyncService.isConfigured();
-  chip.hidden = !on;
-  if (!on) return;
-
-  const label = syncBusy ? t('syncing') : formatSyncTime(SyncService.loadLastSync());
-  chip.innerHTML = '<span class="sync-chip-icon' + (syncBusy ? ' is-spinning' : '') + '">'
-    + I.sync + '</span><span>' + label + '</span>';
-  chip.disabled = syncBusy;
-  chip.setAttribute('aria-label', t('sync') + ' — ' + label);
-  if (!chip.dataset.bound) {
-    chip.dataset.bound = '1';
-    chip.addEventListener('click', runSync);
-  }
-}
-
-// A relative label goes stale on its own, so refresh it on a timer too.
-setInterval(() => {
-  const screen = document.getElementById('screen-more');
-  if (screen && !screen.hidden) renderSyncChip();
-}, 30000);
 
 function syncCard() {
   const card = settingsCard();
@@ -2052,8 +2146,6 @@ function openSyncSettings() {
   const saveBtn = segButton(t('save'), {
     primary: true,
     onClick: async () => {
-      // Never persist an unverified config: sync that looks on but is broken
-      // is worse than sync that is plainly off.
       const config = await runTest();
       if (!config) return;
       SyncService.saveConfig(config);
@@ -2088,6 +2180,8 @@ function renderMoreScreen() {
   const groups = document.getElementById('moreGroups');
   groups.innerHTML = '';
 
+  renderSyncChip();
+
   if (!StorageService.available) {
     const notice = el('div', 'storage-notice is-visible');
     notice.textContent = 'This preview blocks local storage, so changes will not survive a reload. Deploy to a stable HTTPS URL (e.g. GitHub Pages) for full persistence.';
@@ -2107,13 +2201,33 @@ function renderMoreScreen() {
   actions.appendChild(segButton(t('import'), { icon: I.down, onClick: importData }));
   actions.appendChild(segButton(t('clearAll'), { icon: I.trash, danger: true, onClick: clearAllData }));
   dataCard.appendChild(actions);
+  dataCard.appendChild(el('p', 'export-meta', formatExportTime(loadLastExport())));
   dataCard.appendChild(storageKeysBlock());
   groups.appendChild(dataCard);
 
   // ── Cloud Sync
   groups.appendChild(syncCard());
-  renderSyncChip();
 
+  // ── Appearance
+  const appearCard = settingsCard();
+  appearCard.appendChild(settingsHead(t('appearance'), t('appearanceDesc')));
+  const themeRow = el('div', 'theme-swatches');
+  THEMES.forEach((th) => {
+    const on = appTheme === th.id;
+    const b = el('button', 'theme-swatch' + (on ? ' is-selected' : ''));
+    b.type = 'button';
+    b.setAttribute('aria-label', t(th.labelKey));
+    b.setAttribute('aria-pressed', String(on));
+    const disc = el('span', 'theme-disc');
+    disc.style.background = th.swatch;
+    disc.innerHTML = I.check;
+    b.appendChild(disc);
+    b.appendChild(el('span', 'theme-name', t(th.labelKey)));
+    b.addEventListener('click', () => applyThemeChoice(th.id));
+    themeRow.appendChild(b);
+  });
+  appearCard.appendChild(themeRow);
+  groups.appendChild(appearCard);
   // ── Language
   const langCard = settingsCard();
   langCard.appendChild(settingsHead(t('language'), t('languageDesc')));
@@ -2180,6 +2294,12 @@ function openImportGuide() {
   openStudyModal({ title: t('importGuide'), body });
 }
 
+async function applyThemeChoice(id) {
+  applyTheme(id);
+  await DataService.setSetting('theme', id);
+  refreshAll();
+}
+
 async function applyLanguage(lang) {
   appLang = lang;
   await DataService.setSetting('lang', lang);
@@ -2195,6 +2315,30 @@ function applyStaticTranslations() {
   });
   const btn = document.getElementById('btnTodayTop');
   if (btn) btn.textContent = t('today');
+  renderSyncChip();
+}
+
+function renderSyncChip() {
+  const on = SyncService.isConfigured();
+  const at = syncedAt || SyncService.loadLastSync();
+  const when = syncBusy ? t('syncing') : (on ? formatSyncTime(at) : t('syncOff'));
+  const text = t('syncChip') + ' · ' + when;
+  document.querySelectorAll('.sync-chip-label').forEach((node) => {
+    node.textContent = text;
+  });
+  document.querySelectorAll('.sync-chip').forEach((node) => {
+    node.disabled = !!syncBusy;
+    node.setAttribute('aria-label', t('sync') + ' — ' + when);
+    if (node.id === 'syncChip') node.hidden = !on;
+  });
+  document.querySelectorAll('.sync-refresh').forEach((node) => {
+    node.setAttribute('aria-label', t('refresh'));
+    node.disabled = !!syncBusy;
+    node.classList.toggle('is-spinning', !!syncBusy);
+  });
+  document.querySelectorAll('.sync-refresh-label').forEach((node) => {
+    node.textContent = t('refresh');
+  });
 }
 
 function storageKeysBlock() {
@@ -2278,7 +2422,7 @@ function buildTemplatesListBody() {
       const row = el('button', 'tpl-row');
       row.type = 'button';
       const dot = el('span', 'tpl-dot');
-      dot.style.setProperty('--c', EVENT_COLORS[cat.color] || EVENT_COLORS.blue);
+      dot.style.setProperty('--c', resolveColor(cat.color));
       const name = el('span', 'tpl-name', cat.name);
       const n = state.events.filter((e) => (e.category || '') === cat.name).length;
       const cnt = el('span', 'tpl-count', n ? (n === 1 ? t('oneEventUsed') : t('eventsUsed', { n: n })) : '');
@@ -2347,6 +2491,7 @@ function showTemplateForm(cat) {
     s.addEventListener('click', () => { draft.color = c; setSwatchColor(c); });
     swatches.appendChild(s);
   });
+  appendNativeColorSwatch(swatches, draft, setSwatchColor);
   colorField.appendChild(swatches);
   body.appendChild(colorField);
 
@@ -2415,7 +2560,10 @@ async function exportData() {
   a.click();
   a.remove();
   setTimeout(() => URL.revokeObjectURL(url), 1500);
+  const exportedAt = payload.exportedAt;
+  saveLastExport(exportedAt);
   toast(events.length ? t('exported', { n: events.length }) : t('noExport'));
+  renderMoreScreen();
 }
 
 function importData() {
@@ -2680,7 +2828,7 @@ function openEventSheet(eventId, opts) {
       const pill = el('button', 'tpl-chip');
       pill.type = 'button';
       const dot = el('span', 'tpl-chip-dot');
-      dot.style.setProperty('--c', EVENT_COLORS[cat.color] || EVENT_COLORS.blue);
+      dot.style.setProperty('--c', resolveColor(cat.color));
       pill.appendChild(dot);
       pill.appendChild(el('span', '', cat.name));
       if (draft.category === cat.name) pill.classList.add('is-active');
@@ -2738,6 +2886,7 @@ function openEventSheet(eventId, opts) {
     });
     swatches.appendChild(s);
   });
+  appendNativeColorSwatch(swatches, draft, setSwatchColor);
   colorField.appendChild(swatches);
   body.appendChild(colorField);
 
@@ -2951,8 +3100,8 @@ function shiftInsights(dir) {
 
 function catColorOf(name, eColor) {
   const cat = state.categories.find((c) => c.name === name);
-  if (cat) return EVENT_COLORS[cat.color] || EVENT_COLORS.blue;
-  return EVENT_COLORS[eColor] || '#D1D1D6';
+  if (cat) return resolveColor(cat.color);
+  return resolveColor(eColor);
 }
 
 function uncategorizedName() {
@@ -3310,7 +3459,6 @@ function donutChart(segments, opts) {
   const size = 196, cx = size / 2, cy = size / 2;
   const r = size * 0.37, sw = size * 0.125;
   const C = 2 * Math.PI * r;
-  const GAP = 3; // visible separation between neighbouring segments (spec: 2-4px)
   const total = segments.reduce((s, x) => s + x.minutes, 0) || 0;
   const drawable = segments.filter((seg) => total && seg.minutes > 0);
   const wrap = el('div', 'donut-wrap');
@@ -3323,69 +3471,30 @@ function donutChart(segments, opts) {
     })[char]);
   }
 
-  /*
-   * Arc allocation.
-   *
-   * A segment needs roughly (2 * corner radius + gap) of arc before its two
-   * rounded corners meet. Slices below that are topped up and the space is
-   * taken proportionally from slices that can spare it, so the ring keeps one
-   * uniform thickness (spec item 4) instead of thinning small slices.
-   *
-   * Budget for the widest a segment can get (selection adds 6px) so selecting
-   * one never makes its neighbours collide.
-   */
-  const maxStroke = sw + 6;
-  const corner = sw * DONUT_CORNER_RATIO;
-  const minArc = 2 * corner + GAP + 1;
-  const arcs = donutAllocateArcs(drawable.map((s) => s.minutes), C, minArc);
-
+  // Stock shadcn/Recharts look: plain annular sectors, no gaps, no rounded corners.
+  const arcs = drawable.map((seg) => (seg.minutes / total) * C);
   let paths = '';
   let cursor = 0;
   drawable.forEach((seg, i) => {
     const arc = arcs[i];
     const isSel = selectedKey === seg.key;
-    const w = isSel ? maxStroke : sw;
     const opacity = selectedKey && !isSel ? 0.22 : 1;
-
-    // Half the gap from each side, as an angle on the centreline, so the
-    // visible separation stays constant in px.
-    const inset = drawable.length > 1 ? (GAP / 2) / r : 0;
-    const a0 = ((cursor / C) * 2 * Math.PI) - Math.PI / 2 + inset;
-    const a1 = (((cursor + arc) / C) * 2 * Math.PI) - Math.PI / 2 - inset;
+    const a0 = ((cursor / C) * 2 * Math.PI) - Math.PI / 2;
+    const a1 = (((cursor + arc) / C) * 2 * Math.PI) - Math.PI / 2;
     cursor += arc;
     if (a1 <= a0) return;
-
-    const d = donutSectorPath(cx, cy, r - w / 2, r + w / 2, a0, a1, w * DONUT_CORNER_RATIO);
+    const d = donutSectorPath(cx, cy, r - sw / 2, r + sw / 2, a0, a1, 0);
     if (!d) return;
-
     paths += '<path d="' + d + '" fill="' + attr(seg.color) + '"'
+      + ' data-key="' + attr(seg.key) + '"'
+      + ' role="button" tabindex="0" aria-label="' + attr(seg.name) + '"'
       + ' opacity="' + opacity + '"'
-      + ' style="transition: opacity 0.18s ease"/>';
-  });
-
-  // Hit areas follow the same allocation as the drawn arcs, so a tap always
-  // lands on the segment actually under the finger.
-  let hit = '';
-  cursor = 0;
-  drawable.forEach((seg, i) => {
-    const arc = arcs[i];
-    let dash = '';
-    if (drawable.length > 1) {
-      const len = Math.max(0.1, arc - GAP);
-      const start = cursor + GAP / 2;
-      dash = ' stroke-dasharray="' + len.toFixed(2) + ' ' + (C - len).toFixed(2)
-        + '" stroke-dashoffset="' + (-start).toFixed(2) + '"';
-    }
-    cursor += arc;
-    hit += '<circle data-key="' + attr(seg.key) + '" cx="' + cx + '" cy="' + cy
-      + '" r="' + r + '" fill="none" stroke="transparent" stroke-width="' + (sw + 26)
-      + '" stroke-linecap="butt"' + dash + ' transform="rotate(-90 ' + cx + ' ' + cy
-      + ')" tabindex="0" role="button" aria-label="' + attr(seg.name) + '"/>';
+      + ' style="transition: opacity 0.18s ease; cursor: pointer; outline: none"/>';
   });
 
   svgBox.innerHTML = '<svg width="' + size + '" height="' + size + '" viewBox="0 0 '
     + size + ' ' + size + '" role="group" aria-label="' + attr(t('timeDistribution')) + '">'
-    + paths + hit + '</svg>';
+    + paths + '</svg>';
   const center = el('div', 'donut-center');
   const topEl = el('div', 'dc-top');
   const subEl = el('div', 'dc-sub');
@@ -3402,16 +3511,16 @@ function donutChart(segments, opts) {
 
   const onPick = opts.onPick;
   function pick(key) {
-    const seg = segments.find((s) => s.key === key);
+    const seg = segments.find((item) => item.key === key);
     if (seg && onPick) onPick(seg);
   }
   svgBox.addEventListener('click', (ev) => {
-    const t2 = ev.target.closest ? ev.target.closest('circle[data-key]') : null;
+    const t2 = ev.target.closest ? ev.target.closest('path[data-key]') : null;
     if (t2) pick(t2.dataset.key);
   });
   svgBox.addEventListener('keydown', (ev) => {
     if (ev.key !== 'Enter' && ev.key !== ' ') return;
-    const t2 = ev.target.closest ? ev.target.closest('circle[data-key]') : null;
+    const t2 = ev.target.closest ? ev.target.closest('path[data-key]') : null;
     if (t2) { ev.preventDefault(); pick(t2.dataset.key); }
   });
 
@@ -3563,21 +3672,12 @@ function trendCard(shownEvents, color, nameLabel) {
   title.appendChild(dot);
   title.appendChild(document.createTextNode(t('trend')));
   if (nameLabel) title.appendChild(el('span', 'chart-head-sub', nameLabel));
-  const info = el('span', 'trend-info');
-  head.append(title, info);
+  head.appendChild(title);
   c.appendChild(head);
   if (!shownEvents.length) { c.appendChild(chartEmpty()); return c; }
   const tr = buildTrend(shownEvents);
   if (tr.values.every((v) => v === 0)) { c.appendChild(chartEmpty()); return c; }
-  const host = trendSVG(tr.labels, tr.values, { type: tr.kind, color });
-  c.appendChild(host);
-  const svg = host.querySelector('svg');
-  svg.addEventListener('click', (ev) => {
-    const hitEl = ev.target.closest ? ev.target.closest('[data-i]') : null;
-    if (!hitEl) return;
-    const i = Number(hitEl.dataset.i);
-    info.textContent = tr.pickLabel(i) + ' · ' + fmtTime(tr.values[i]);
-  });
+  c.appendChild(trendSVG(tr.labels, tr.values, { type: tr.kind, color }));
   return c;
 }
 
@@ -3599,7 +3699,6 @@ function buildDayTimeline(events, nowMin, onBlockClick) {
   for (let h = 0; h <= 24; h++) {
     const line = el('div', 'timeline-hour');
     line.style.top = (h / 24 * H) + 'px';
-    if (h % 3 === 0) line.style.background = 'rgba(60,60,67,0.16)';
     canvas.appendChild(line);
   }
 
@@ -3622,7 +3721,7 @@ function buildDayTimeline(events, nowMin, onBlockClick) {
       const height = Math.max(18, b.d * pxPerMin);
       const left = (li / n) * 100;
       const width = (100 / n) - 0.8;
-      const color = EVENT_COLORS[b.e.color] || EVENT_COLORS.blue;
+      const color = resolveColor(b.e.color);
       const block = el('button', 'timeline-block');
       block.type = 'button';
       block.setAttribute('aria-label', b.e.title + ', ' + b.e.startTime + '–' + b.e.endTime);
@@ -3668,7 +3767,7 @@ function renderOverview(view) {
   hero.appendChild(el('span', 'hero-label', t('totalTime')));
   hero.appendChild(el('div', 'hero-value', fmtTime(total)));
   hero.appendChild(el('div', 'hero-meta',
-    insightsLabel() + ' · ' + sessionsMeta(evs.length) + ' · ' + activeDaysMeta(new Set(evs.map((e) => e.date)).size)));
+    sessionsMeta(evs.length) + ' · ' + activeDaysMeta(new Set(evs.map((e) => e.date)).size)));
   view.appendChild(hero);
 
   // Day range: the time-block timeline IS the trend
@@ -3686,7 +3785,15 @@ function renderOverview(view) {
 
   // Donut — interactive time distribution with ranked legend
   const dc = chartCard();
-  dc.appendChild(el('h3', 'chart-title', t('timeDistribution')));
+  const donutHead = el('div', 'chart-head');
+  donutHead.appendChild(el('span', 'chart-head-title', t('timeDistribution')));
+  if (sel) {
+    const reset = el('button', 'chip chip-reset chart-head-reset', t('allCategories') + ' ×');
+    reset.type = 'button';
+    reset.addEventListener('click', () => { analytics.selected = null; renderInsights(); });
+    donutHead.appendChild(reset);
+  }
+  dc.appendChild(donutHead);
   if (!segs.length) {
     dc.appendChild(chartEmpty());
   } else {
@@ -3733,10 +3840,6 @@ function renderOverview(view) {
     goBtn.type = 'button';
     goBtn.addEventListener('click', () => analyticsGo('category', { categoryKey: sel.key }));
     head.appendChild(goBtn);
-    const reset = el('button', 'chip chip-reset', t('allCategories') + ' ×');
-    reset.type = 'button';
-    reset.addEventListener('click', () => { analytics.selected = null; renderInsights(); });
-    head.appendChild(reset);
   } else {
     title.appendChild(document.createTextNode(t('topTasks')));
     head.appendChild(title);
@@ -3970,8 +4073,6 @@ function renderInsights(dir) {
 
   body.innerHTML = '';
   const view = el('div', 'insights-view');
-  if (dir === 'push') view.classList.add('view-push');
-  else if (dir === 'pop') view.classList.add('view-pop');
   body.appendChild(view);
 
   const { level, category, task } = analytics.route;
@@ -4112,6 +4213,7 @@ function updateMonthTitle() {
 
 function updateTodayButton() {
   const btn = document.getElementById('btnTodayTop');
+  if (!btn) return;
   const n = new Date();
   const onToday = state.viewYear === n.getFullYear() &&
     state.viewMonth === n.getMonth() &&
@@ -4135,6 +4237,7 @@ function refreshAll() {
 
 async function refreshEvents() {
   state.events = await DataService.fetchAll();
+  lastSyncAt = Date.now();
 }
 
 async function refreshCategories() {
@@ -4193,10 +4296,28 @@ function wireNavigation() {
   document.getElementById('monthNavPrev').addEventListener('click', prevMonth);
   document.getElementById('monthNavNext').addEventListener('click', nextMonth);
   document.getElementById('monthTitleBtn').addEventListener('click', openMonthSelector);
-  document.getElementById('btnTodayTop').addEventListener('click', goToToday);
+  const todayTop = document.getElementById('btnTodayTop');
+  if (todayTop) todayTop.addEventListener('click', goToToday);
   document.getElementById('btnAddDay').addEventListener('click', () => openEventSheet(null));
   document.getElementById('btnAddToday').addEventListener('click', () => openEventSheet(null, { date: todayISO() }));
   document.getElementById('insightsBack').addEventListener('click', analyticsBack);
+  document.querySelectorAll('.sync-chip').forEach((btn) => {
+    btn.addEventListener('click', runSync);
+  });
+  document.querySelectorAll('.sync-refresh').forEach((btn) => {
+    btn.addEventListener('click', runSync);
+  });
+}
+
+function preventDoubleTapZoom() {
+  let last = 0;
+  document.addEventListener('touchend', (e) => {
+    const now = Date.now();
+    if (now - last < 350 && !e.target.closest('button, a, input, textarea, label, [role="button"]')) {
+      e.preventDefault();
+    }
+    last = now;
+  }, { passive: false });
 }
 
 function wireImportFile() {
@@ -4224,9 +4345,14 @@ async function init() {
   const savedLang = await DataService.getSetting('lang');
   if (savedLang === 'zh' || savedLang === 'en') appLang = savedLang;
   document.documentElement.lang = appLang === 'zh' ? 'zh-CN' : 'en';
+  const savedTheme = await DataService.getSetting('theme');
+  applyTheme(savedTheme);
+  syncedAt = SyncService.loadLastSync();
+  lastSyncAt = syncedAt ? Date.parse(syncedAt) : Date.now();
 
   buildWeekdayHeader();
   wireNavigation();
+  preventDoubleTapZoom();
   wireImportFile();
   enableSwipe();
 

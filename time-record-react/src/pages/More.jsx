@@ -2,9 +2,11 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 
 import { openImportGuide } from '@/components/ImportGuideModal.jsx';
 import { openSyncSettings } from '@/components/SyncSettingsModal.jsx';
-import { SyncStatusBadge } from '@/components/SyncStatusBadge.jsx';
 import { useAlertDialog } from '@/hooks/useAlertDialog.jsx';
+import { SyncActions } from '@/components/SyncActions.jsx';
 import { THEMES } from '@/lib/themes.js';
+import { formatSyncTime } from '@/lib/sync-core.js';
+import { clearLastSync } from '@/lib/supabase-sync.js';
 import { openTemplatesModal } from '@/components/TemplatesModal.jsx';
 import { Button } from '@/components/ui/button.jsx';
 import {
@@ -22,10 +24,6 @@ import { getLang, t } from '@/lib/i18n.js';
 import { toast } from '@/lib/overlays.js';
 import { importPayload } from '@/lib/shortcut-import.js';
 import { StorageService } from '@/lib/storage.js';
-import {
-  clearLastSync, isConfigured, loadConfig, loadLastSync, saveLastSync, syncNow,
-} from '@/lib/supabase-sync.js';
-import { maskKey } from '@/lib/sync-core.js';
 import { formatBytes } from '@/lib/analytics.js';
 import { cn } from '@/lib/utils.js';
 
@@ -86,15 +84,36 @@ function SettingsRow({ icon, label, value, onClick }) {
   );
 }
 
+const EXPORT_AT_KEY = 'calendar_export_at_v1';
+
+function loadLastExport() {
+  try {
+    const raw = window.localStorage.getItem(EXPORT_AT_KEY);
+    return raw && !Number.isNaN(Date.parse(raw)) ? raw : null;
+  } catch (err) {
+    return null;
+  }
+}
+
+function saveLastExport(iso) {
+  try { window.localStorage.setItem(EXPORT_AT_KEY, iso); return true; }
+  catch (err) { return false; }
+}
+
+function formatExportLabel(iso) {
+  if (!iso) return t('lastExportNever');
+  const { key, vars, literal } = formatSyncTime(iso);
+  return t('lastExport', { s: literal ?? t(key, vars || undefined) });
+}
+
 export function MorePage({
-  events, categories, lang, theme, onSaveCategories, onClearAll, onApplyLanguage,
+  events, categories, lang, theme, lastCloudSync, syncOn, syncBusy, onSync,
+  onSyncSaved, onSyncDisconnected, onSaveCategories, onClearAll, onApplyLanguage,
   onApplyTheme, onImported,
 }) {
   const fileInputRef = useRef(null);
   const [keysOpen, setKeysOpen] = useState(false);
-  const [syncOn, setSyncOn] = useState(() => isConfigured());
-  const [syncBusy, setSyncBusy] = useState(false);
-  const [syncedAt, setSyncedAt] = useState(() => loadLastSync());
+  const [lastExportAt, setLastExportAt] = useState(() => loadLastExport());
   const { showDialog, dialog } = useAlertDialog();
   // Always hand the modals the freshest data without rebuilding them.
   const dataRef = useRef({ events, categories });
@@ -150,6 +169,8 @@ export function MorePage({
     a.click();
     a.remove();
     setTimeout(() => URL.revokeObjectURL(url), 1500);
+    saveLastExport(payload.exportedAt);
+    setLastExportAt(payload.exportedAt);
     toast(list.length ? t('exported', { n: list.length }) : t('noExport'));
   };
 
@@ -202,44 +223,6 @@ export function MorePage({
     });
   };
 
-  /* ── Cloud sync ──
-     Pulls remote rows, merges last-write-wins, pushes what is missing, then
-     hands the merged list to the app through the normal import path so the
-     UI refreshes exactly as it does for a file import. */
-  const runSync = async () => {
-    if (syncBusy) return;
-    setSyncBusy(true);
-    try {
-      const local = await DataService.exportAll();
-      const res = await syncNow(local, loadConfig());
-      if (!res.ok) {
-        toast(t(res.code));
-        return;
-      }
-      if (res.pulled > 0) {
-        await DataService.importAll(res.merged);
-        await onImported?.();
-      }
-      setSyncedAt(res.syncedAt);
-      saveLastSync(res.syncedAt);
-      toast(res.pushed || res.pulled
-        ? t('syncDone', { u: res.pushed, d: res.pulled })
-        : t('syncNoChanges'));
-    } finally {
-      setSyncBusy(false);
-    }
-  };
-
-  const syncStatusLine = () => {
-    if (!syncOn) return t('syncDesc');
-    const cfg = loadConfig();
-    const where = cfg ? cfg.url.replace(/^https:\/\//, '') : '';
-    const when = syncedAt
-      ? t('syncLast', { s: new Date(syncedAt).toLocaleTimeString() })
-      : t('syncNever');
-    return `${where} · ${when}`;
-  };
-
   const storageRows = useMemo(() => {
     const rows = [
       { key: STORAGE_KEY, entries: events.length, size: estimatedSize },
@@ -258,13 +241,15 @@ export function MorePage({
     <main className="screen is-active" id="screen-more" aria-label="More">
       <header className="topbar">
         <h1 className="page-title">{t('more')}</h1>
-        <SyncStatusBadge
-          configured={syncOn}
-          syncedAt={syncedAt}
-          busy={syncBusy}
-          lang={lang}
-          onClick={runSync}
-        />
+        <div className="topbar-end">
+          <SyncActions
+            lastCloudSync={lastCloudSync}
+            syncOn={syncOn}
+            syncBusy={syncBusy}
+            onSync={onSync}
+            hideWhenOff
+          />
+        </div>
       </header>
 
       <div className="mt-3.5 flex flex-col gap-4" id="moreGroups">
@@ -304,6 +289,8 @@ export function MorePage({
                 {t('clearAll')}
               </Button>
             </div>
+
+            <p className="export-meta">{formatExportLabel(lastExportAt)}</p>
 
             {/* Storage keys — a real Collapsible instead of <details> */}
             <Collapsible
@@ -372,7 +359,14 @@ export function MorePage({
               </span>
             </CardTitle>
             <CardDescription className="text-xs leading-relaxed">
-              {syncStatusLine()}
+              {syncOn
+                ? t('syncLast', {
+                  s: (() => {
+                    const { key, vars, literal } = formatSyncTime(lastCloudSync);
+                    return literal ?? t(key, vars || undefined);
+                  })(),
+                })
+                : t('syncDesc')}
             </CardDescription>
           </CardHeader>
           <CardContent className="flex flex-wrap gap-2 px-4">
@@ -382,13 +376,16 @@ export function MorePage({
                   label={syncBusy ? t('syncing') : t('syncNow')}
                   icon={I.sync}
                   variant="default"
-                  onClick={runSync}
+                  onClick={onSync}
                 />
                 <PillButton
                   label={t('syncSettings')}
                   onClick={() => openSyncSettings({
-                    onSaved: () => setSyncOn(true),
-                    onDisconnected: () => { setSyncOn(false); setSyncedAt(null); clearLastSync(); },
+                    onSaved: onSyncSaved,
+                    onDisconnected: () => {
+                      clearLastSync();
+                      onSyncDisconnected?.();
+                    },
                   })}
                 />
               </>
@@ -398,9 +395,11 @@ export function MorePage({
                 icon={I.cloud}
                 variant="default"
                 onClick={() => openSyncSettings({
-                  onSaved: () => setSyncOn(true),
-                  onDisconnected: () => { setSyncOn(false); setSyncedAt(null); clearLastSync(); },
-                })}
+                  onSaved: onSyncSaved,
+                  onDisconnected: () => {
+                    clearLastSync();
+                    onSyncDisconnected?.();
+                  },                })}
               />
             )}
           </CardContent>

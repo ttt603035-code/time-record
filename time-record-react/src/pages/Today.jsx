@@ -3,6 +3,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { DayTimeline } from '@/components/DayTimeline.jsx';
 import { EmptyState } from '@/components/EmptyState.jsx';
 import { currentMinutes, pad2, todayISO } from '@/lib/date.js';
+import { SyncActions } from '@/components/SyncActions.jsx';
 import { formatDayLabel, t } from '@/lib/i18n.js';
 
 function fmtNow() {
@@ -10,7 +11,7 @@ function fmtNow() {
   return pad2(n.getHours()) + ':' + pad2(n.getMinutes());
 }
 
-export function TodayPage({ events, onAddEvent, onEditEvent }) {
+export function TodayPage({ events, onAddEvent, onEditEvent, lastCloudSync, syncOn, syncBusy, onSync }) {
   // The legacy app refreshed the "Now" chip every 30 seconds.
   const [nowText, setNowText] = useState(fmtNow);
   const [nowMin, setNowMin] = useState(currentMinutes);
@@ -37,17 +38,20 @@ export function TodayPage({ events, onAddEvent, onEditEvent }) {
     <main className="screen is-active" id="screen-today" aria-label="Today">
       <header className="topbar">
         <h1 className="page-title">{t('today')}</h1>
-        <button
-          className="add-btn"
-          id="btnAddToday"
-          type="button"
-          aria-label="Add event for today"
-          onClick={() => onAddEvent(iso)}
-        >
-          <svg viewBox="0 0 24 24" aria-hidden="true">
-            <path d="M12 5v14M5 12h14" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" />
-          </svg>
-        </button>
+        <div className="topbar-end">
+          <SyncActions lastCloudSync={lastCloudSync} syncOn={syncOn} syncBusy={syncBusy} onSync={onSync} />
+          <button
+            className="add-btn"
+            id="btnAddToday"
+            type="button"
+            aria-label="Add event for today"
+            onClick={() => onAddEvent(iso)}
+          >
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M12 5v14M5 12h14" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" />
+            </svg>
+          </button>
+        </div>
       </header>
 
       <div className="today-hero">

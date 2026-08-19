@@ -4,7 +4,7 @@ import { Input } from '@/components/ui/input.jsx';
 import { Label } from '@/components/ui/label.jsx';
 import { Textarea } from '@/components/ui/textarea.jsx';
 import { ColorSwatches } from '@/components/ColorSwatches.jsx';
-import { EVENT_COLORS } from '@/lib/constants.js';
+import { resolveColor } from '@/lib/constants.js';
 import { formatShortDate, t } from '@/lib/i18n.js';
 import { buildDateWheel, buildTimeWheel } from '@/lib/overlays.js';
 import { cn } from '@/lib/utils.js';
@@ -191,7 +191,7 @@ export function EventFormFields({
               >
                 <span
                   className="size-2 rounded-full"
-                  style={{ background: EVENT_COLORS[cat.color] || EVENT_COLORS.blue }}
+                  style={{ background: resolveColor(cat.color) }}
                 />
                 {cat.name}
               </button>

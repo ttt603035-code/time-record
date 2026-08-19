@@ -19,7 +19,7 @@ import { Button } from '@/components/ui/button.jsx';
 import { Input } from '@/components/ui/input.jsx';
 import { Label } from '@/components/ui/label.jsx';
 import { ColorSwatches } from '@/components/ColorSwatches.jsx';
-import { EVENT_COLORS } from '@/lib/constants.js';
+import { resolveColor } from '@/lib/constants.js';
 import { t } from '@/lib/i18n.js';
 import { useAlertDialog } from '@/hooks/useAlertDialog.jsx';
 import { normalizeCategory } from '@/lib/model.js';
@@ -67,7 +67,7 @@ function TemplateList({ categories, events, onEdit, onAdd, onDelete }) {
                 >
                   <span
                     className="size-3.5 shrink-0 rounded-full"
-                    style={{ background: EVENT_COLORS[cat.color] || EVENT_COLORS.blue }}
+                    style={{ background: resolveColor(cat.color) }}
                   />
                   <span className="min-w-0 flex-1 truncate text-[15px] font-semibold">
                     {cat.name}

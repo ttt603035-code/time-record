@@ -8,6 +8,10 @@ import { importFromShortcutURL } from '@/lib/shortcut-import.js';
 import { getLang, setLang, t } from '@/lib/i18n.js';
 import { toast } from '@/lib/overlays.js';
 import { DEFAULT_THEME, applyTheme } from '@/lib/themes.js';
+import { openSyncSettings } from '@/components/SyncSettingsModal.jsx';
+import {
+  clearLastSync, isConfigured, loadConfig, loadLastSync, saveLastSync, syncNow,
+} from '@/lib/supabase-sync.js';
 
 /**
  * The React replacement for the legacy global `state` object + `refreshAll()`.
@@ -28,12 +32,17 @@ export function useAppData() {
   const [categories, setCategories] = useState([]);
   const [lang, setLangState] = useState(getLang());
   const [theme, setThemeState] = useState(DEFAULT_THEME);
+  const [lastSyncAt, setLastSyncAt] = useState(() => Date.now());
+  const [lastCloudSync, setLastCloudSync] = useState(() => loadLastSync());
+  const [syncOn, setSyncOn] = useState(() => isConfigured());
+  const [syncBusy, setSyncBusy] = useState(false);
   const [ready, setReady] = useState(false);
   const initStarted = useRef(false);
 
   const refreshEvents = useCallback(async () => {
     const list = await DataService.fetchAll();
     setEvents(list);
+    setLastSyncAt(Date.now());
     return list;
   }, []);
 
@@ -139,11 +148,54 @@ export function useAppData() {
     toast(next === 'zh' ? '已切换为中文' : 'Switched to English');
   }, []);
 
+  const runCloudSync = useCallback(async () => {
+    if (!isConfigured()) {
+      openSyncSettings({
+        onSaved: () => setSyncOn(true),
+        onDisconnected: () => {
+          setSyncOn(false);
+          setLastCloudSync(null);
+          clearLastSync();
+        },
+      });
+      return;
+    }
+    if (syncBusy) return;
+    setSyncBusy(true);
+    try {
+      const local = await DataService.exportAll();
+      const res = await syncNow(local, loadConfig());
+      if (!res.ok) {
+        toast(t(res.code));
+        return;
+      }
+      if (res.pulled > 0) {
+        await DataService.importAll(res.merged);
+        await refreshEvents();
+      }
+      setLastCloudSync(res.syncedAt);
+      saveLastSync(res.syncedAt);
+      setLastSyncAt(Date.parse(res.syncedAt) || Date.now());
+      toast(res.pushed || res.pulled
+        ? t('syncDone', { u: res.pushed, d: res.pulled })
+        : t('syncNoChanges'));
+    } finally {
+      setSyncBusy(false);
+    }
+  }, [syncBusy, refreshEvents]);
+
   return {
     events,
     categories,
     lang,
     theme,
+    lastSyncAt,
+    lastCloudSync,
+    syncOn,
+    syncBusy,
+    setSyncOn,
+    setLastCloudSync,
+    runCloudSync,
     ready,
     refreshEvents,
     refreshCategories,
