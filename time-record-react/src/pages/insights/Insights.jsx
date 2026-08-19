@@ -49,7 +49,7 @@ export function InsightsPage({
       <header className="topbar">
         <h1 className="page-title">{t('insights')}</h1>
         <div className="topbar-end">
-          <SyncActions lastSyncAt={lastSyncAt} onRefresh={onRefresh} />
+          <SyncActions lastCloudSync={lastCloudSync} syncOn={syncOn} syncBusy={syncBusy} onSync={onSync} />
         </div>
       </header>
 

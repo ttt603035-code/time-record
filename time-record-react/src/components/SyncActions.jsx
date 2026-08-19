@@ -1,21 +1,35 @@
 import { t } from '@/lib/i18n.js';
+import { formatSyncTime } from '@/lib/sync-core.js';
 
-function formatSyncClock(ms) {
-  const n = new Date(ms || Date.now());
-  return String(n.getHours()).padStart(2, '0') + ':' + String(n.getMinutes()).padStart(2, '0');
+function chipWhen({ syncOn, lastCloudSync, syncBusy }) {
+  if (syncBusy) return t('syncing');
+  if (!syncOn) return t('syncOff');
+  const { key, vars, literal } = formatSyncTime(lastCloudSync);
+  return literal ?? t(key, vars || undefined);
 }
 
-export function SyncActions({ lastSyncAt, onRefresh }) {
+export function SyncActions({
+  lastCloudSync, syncOn, syncBusy, onSync, hideWhenOff = false,
+}) {
+  if (hideWhenOff && !syncOn) return null;
+  const when = chipWhen({ syncOn, lastCloudSync, syncBusy });
   return (
     <div className="sync-actions">
-      <span className="chip sync-chip">
-        <span className="sync-chip-label">{`${t('sync')} · ${formatSyncClock(lastSyncAt)}`}</span>
-      </span>
       <button
-        className="chip sync-refresh"
+        className="chip sync-chip"
+        type="button"
+        disabled={syncBusy}
+        aria-label={`${t('sync')} — ${when}`}
+        onClick={onSync}
+      >
+        <span className="sync-chip-label">{`${t('syncChip')} · ${when}`}</span>
+      </button>
+      <button
+        className={`chip sync-refresh${syncBusy ? ' is-spinning' : ''}`}
         type="button"
         aria-label={t('refresh')}
-        onClick={onRefresh}
+        disabled={syncBusy}
+        onClick={onSync}
       >
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
           <path d="M21 12a9 9 0 1 1-9-9c2.52 0 4.93 1 6.74 2.74L21 8" />

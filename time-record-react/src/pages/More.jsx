@@ -1,9 +1,12 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 
 import { openImportGuide } from '@/components/ImportGuideModal.jsx';
+import { openSyncSettings } from '@/components/SyncSettingsModal.jsx';
 import { useAlertDialog } from '@/hooks/useAlertDialog.jsx';
 import { SyncActions } from '@/components/SyncActions.jsx';
 import { THEMES } from '@/lib/themes.js';
+import { formatSyncTime } from '@/lib/sync-core.js';
+import { clearLastSync } from '@/lib/supabase-sync.js';
 import { openTemplatesModal } from '@/components/TemplatesModal.jsx';
 import { Button } from '@/components/ui/button.jsx';
 import {
@@ -81,12 +84,36 @@ function SettingsRow({ icon, label, value, onClick }) {
   );
 }
 
+const EXPORT_AT_KEY = 'calendar_export_at_v1';
+
+function loadLastExport() {
+  try {
+    const raw = window.localStorage.getItem(EXPORT_AT_KEY);
+    return raw && !Number.isNaN(Date.parse(raw)) ? raw : null;
+  } catch (err) {
+    return null;
+  }
+}
+
+function saveLastExport(iso) {
+  try { window.localStorage.setItem(EXPORT_AT_KEY, iso); return true; }
+  catch (err) { return false; }
+}
+
+function formatExportLabel(iso) {
+  if (!iso) return t('lastExportNever');
+  const { key, vars, literal } = formatSyncTime(iso);
+  return t('lastExport', { s: literal ?? t(key, vars || undefined) });
+}
+
 export function MorePage({
-  events, categories, lang, theme, lastSyncAt, onRefresh, onSaveCategories, onClearAll, onApplyLanguage,
+  events, categories, lang, theme, lastCloudSync, syncOn, syncBusy, onSync,
+  onSyncSaved, onSyncDisconnected, onSaveCategories, onClearAll, onApplyLanguage,
   onApplyTheme, onImported,
 }) {
   const fileInputRef = useRef(null);
   const [keysOpen, setKeysOpen] = useState(false);
+  const [lastExportAt, setLastExportAt] = useState(() => loadLastExport());
   const { showDialog, dialog } = useAlertDialog();
   // Always hand the modals the freshest data without rebuilding them.
   const dataRef = useRef({ events, categories });
@@ -142,6 +169,8 @@ export function MorePage({
     a.click();
     a.remove();
     setTimeout(() => URL.revokeObjectURL(url), 1500);
+    saveLastExport(payload.exportedAt);
+    setLastExportAt(payload.exportedAt);
     toast(list.length ? t('exported', { n: list.length }) : t('noExport'));
   };
 
@@ -213,7 +242,13 @@ export function MorePage({
       <header className="topbar">
         <h1 className="page-title">{t('more')}</h1>
         <div className="topbar-end">
-          <SyncActions lastSyncAt={lastSyncAt} onRefresh={onRefresh} />
+          <SyncActions
+            lastCloudSync={lastCloudSync}
+            syncOn={syncOn}
+            syncBusy={syncBusy}
+            onSync={onSync}
+            hideWhenOff
+          />
         </div>
       </header>
 
@@ -254,6 +289,8 @@ export function MorePage({
                 {t('clearAll')}
               </Button>
             </div>
+
+            <p className="export-meta">{formatExportLabel(lastExportAt)}</p>
 
             {/* Storage keys — a real Collapsible instead of <details> */}
             <Collapsible
@@ -302,6 +339,70 @@ export function MorePage({
                 ))}
               </CollapsibleContent>
             </Collapsible>
+          </CardContent>
+        </Card>
+
+        {/* ── Cloud Sync */}
+        <Card className="gap-4 py-4">
+          <CardHeader className="gap-1 px-4">
+            <CardTitle className="flex items-center gap-2 text-[15px] font-bold tracking-tight">
+              {t('sync')}
+              <span
+                className={cn(
+                  'rounded-full px-2 py-0.5 text-[10px] font-extrabold tracking-[0.04em] uppercase',
+                  syncOn
+                    ? 'bg-emerald-500/15 text-emerald-700'
+                    : 'bg-secondary text-muted-foreground',
+                )}
+              >
+                {syncOn ? t('syncOn') : t('syncOff')}
+              </span>
+            </CardTitle>
+            <CardDescription className="text-xs leading-relaxed">
+              {syncOn
+                ? t('syncLast', {
+                  s: (() => {
+                    const { key, vars, literal } = formatSyncTime(lastCloudSync);
+                    return literal ?? t(key, vars || undefined);
+                  })(),
+                })
+                : t('syncDesc')}
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="flex flex-wrap gap-2 px-4">
+            {syncOn ? (
+              <>
+                <PillButton
+                  label={syncBusy ? t('syncing') : t('syncNow')}
+                  icon={I.sync}
+                  variant="default"
+                  onClick={onSync}
+                />
+                <PillButton
+                  label={t('syncSettings')}
+                  onClick={() => openSyncSettings({
+                    onSaved: onSyncSaved,
+                    onDisconnected: () => {
+                      clearLastSync();
+                      onSyncDisconnected?.();
+                    },
+                  })}
+                />
+              </>
+            ) : (
+              <PillButton
+                label={t('syncSetUp')}
+                icon={I.cloud}
+                variant="default"
+                onClick={() => openSyncSettings({
+                  onSaved: onSyncSaved,
+                  onDisconnected: () => {
+                    clearLastSync();
+                    onSyncDisconnected?.();
+                  },
+                })}
+              />
+            )}
           </CardContent>
         </Card>
 

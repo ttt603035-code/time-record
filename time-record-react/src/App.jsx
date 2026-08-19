@@ -30,7 +30,8 @@ export default function App() {
     events, categories, lang,
     createEvent, updateEvent, removeEvent,
     saveCategories, clearAll, applyLanguage,
-    theme, applyTheme, lastSyncAt,
+    theme, applyTheme,
+    lastCloudSync, syncOn, syncBusy, setSyncOn, setLastCloudSync, runCloudSync,
     refreshEvents, refreshCategories,
   } = useAppData();
 
@@ -124,8 +125,10 @@ export default function App() {
           onSetMonth={handleSetMonth}
           onAddEvent={handleAddEvent}
           onEditEvent={handleEditEvent}
-          lastSyncAt={lastSyncAt}
-          onRefresh={refreshAfterImport}
+          lastCloudSync={lastCloudSync}
+          syncOn={syncOn}
+          syncBusy={syncBusy}
+          onSync={runCloudSync}
         />
       ) : null}
 
@@ -134,8 +137,10 @@ export default function App() {
           events={events}
           onAddEvent={handleAddEvent}
           onEditEvent={handleEditEvent}
-          lastSyncAt={lastSyncAt}
-          onRefresh={refreshAfterImport}
+          lastCloudSync={lastCloudSync}
+          syncOn={syncOn}
+          syncBusy={syncBusy}
+          onSync={runCloudSync}
         />
       ) : null}
 
@@ -156,8 +161,10 @@ export default function App() {
             onGo={analytics.go}
             onBack={analytics.back}
             onEditEvent={handleEditEvent}
-            lastSyncAt={lastSyncAt}
-            onRefresh={refreshAfterImport}
+            lastCloudSync={lastCloudSync}
+            syncOn={syncOn}
+            syncBusy={syncBusy}
+            onSync={runCloudSync}
           />
         </Suspense>
       ) : null}
@@ -168,8 +175,12 @@ export default function App() {
           categories={categories}
           lang={lang}
           theme={theme}
-          lastSyncAt={lastSyncAt}
-          onRefresh={refreshAfterImport}
+          lastCloudSync={lastCloudSync}
+          syncOn={syncOn}
+          syncBusy={syncBusy}
+          onSync={runCloudSync}
+          onSyncSaved={() => setSyncOn(true)}
+          onSyncDisconnected={() => { setSyncOn(false); setLastCloudSync(null); }}
           onSaveCategories={saveCategories}
           onClearAll={clearAll}
           onApplyLanguage={applyLanguage}
