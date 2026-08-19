@@ -112,6 +112,13 @@ async function getClient(cfg) {
       auth: { persistSession: false, autoRefreshToken: false },
     });
   })();
+  // If first init fails (network/CDN/cache), allow the next call to retry.
+  clientPromise.catch(() => {
+    if (clientFor === fingerprint) {
+      clientPromise = null;
+      clientFor = '';
+    }
+  });
   return clientPromise;
 }
 

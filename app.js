@@ -856,6 +856,12 @@ const SyncService = (() => {
         auth: { persistSession: false, autoRefreshToken: false },
       });
     })();
+    clientPromise.catch(() => {
+      if (clientFor === fingerprint) {
+        clientPromise = null;
+        clientFor = '';
+      }
+    });
     return clientPromise;
   }
 

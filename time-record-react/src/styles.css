@@ -1986,30 +1986,27 @@ textarea.text-input { resize: none; line-height: 1.45; }
 .topbar-end { display: flex; align-items: center; gap: 8px; flex: 0 0 auto; }
 .sync-actions { display: flex; align-items: center; gap: 6px; }
 .sync-chip { font-variant-numeric: tabular-nums; }
-button.chip.sync-chip {
-  width: auto;
-  height: auto;
-  min-width: 0;
-  flex: 0 0 auto;
-  white-space: nowrap;
-  color: var(--text-2);
-  border-color: var(--border);
-  cursor: pointer;
-}
-button.chip.sync-chip:active,
-button.chip.sync-refresh:active { opacity: 0.55; }
-button.chip.sync-chip[disabled],
-button.chip.sync-refresh[disabled] { opacity: 0.55; }
-/* Same grey chip chrome as Sync — only keep button-specific resets. */
+button.chip.sync-chip,
 button.chip.sync-refresh {
   width: auto;
   height: auto;
   min-width: 0;
   flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 30px;
+  padding: 6px 12px;
+  line-height: 1;
   white-space: nowrap;
   color: var(--text-2);
   border-color: var(--border);
 }
+button.chip.sync-chip { cursor: pointer; }
+button.chip.sync-chip:active,
+button.chip.sync-refresh:active { opacity: 0.55; }
+button.chip.sync-chip[disabled],
+button.chip.sync-refresh[disabled] { opacity: 0.55; }
 button.chip.sync-refresh svg { width: 14px; height: 14px; }
 button.chip.sync-refresh.is-spinning svg { animation: sync-spin 1s linear infinite; }
 

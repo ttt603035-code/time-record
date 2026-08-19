@@ -166,7 +166,7 @@ export function useAppData() {
       const local = await DataService.exportAll();
       const res = await syncNow(local, loadConfig());
       if (!res.ok) {
-        toast(t(res.code));
+        toast(res.detail ? `${t(res.code)} (${res.detail})` : t(res.code));
         return;
       }
       if (res.pulled > 0) {
