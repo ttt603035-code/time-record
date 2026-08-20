@@ -1,5 +1,7 @@
 # 快捷指令 → Supabase → 看板
 
+> 想要一步一步照着点的版本，看 **[shortcuts-step-by-step.md](shortcuts-step-by-step.md)**（含建库、每个动作填什么、验收和排错）。本文是字段与协议的参考手册。
+
 这份文档说明：iPhone 快捷指令 `time record 1` 的 **结束** 和 **补录** 两个分支，完成后如何把这条记录写进你自己的 Supabase `events` 表，让本站（今天 / 日历 / 洞悉）打开就能看到。
 
 分工不变：

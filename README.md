@@ -187,9 +187,11 @@ table / key rejected / blocked by RLS / network), not just "failed".
 
 Recording still happens in the iPhone Shortcut `time record 1`; the site is a
 read-only board. To have the Shortcut POST each finished record to the same
-`events` table, follow **[docs/shortcuts-supabase.md](docs/shortcuts-supabase.md)**
-— exact URL, headers, JSON body, how to generate `id`, and how the fields map
-to the calendar event title.
+`events` table, follow **[docs/shortcuts-step-by-step.md](docs/shortcuts-step-by-step.md)**
+(手把手：建库、逐个动作怎么填、验收、排错) or the reference sheet
+**[docs/shortcuts-supabase.md](docs/shortcuts-supabase.md)** — exact URL,
+headers, JSON body, how to generate `id`, and how the fields map to the
+calendar event title.
 
 ### How conflicts are resolved
 
