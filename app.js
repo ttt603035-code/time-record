@@ -151,6 +151,10 @@ const I18N = {
     syncErrRls: 'Blocked by row-level security — check the table policy',
     syncErrAuth: 'The anon key was rejected',
     syncErrUnknown: 'Sync failed',
+    syncErrDetail: 'Details: %s',
+    syncChipFailed: 'failed',
+    syncAutoFailed: 'Cloud sync failed — %s',
+    syncPulled: 'Pulled %n new records from the cloud',
     lastExportNever: 'Not exported yet',
     lastExport: 'Last exported %s',
     pickColor: 'More colours',
@@ -177,7 +181,7 @@ const I18N = {
     segDay: 'Day', segWeek: 'Week', segMonth: 'Month', segYear: 'Year',
     importGuide: 'Import from Shortcuts',
     importGuideDesc: 'Have your Shortcut build this JSON, save it as a file, then tap Import.',
-    importGuideNote: 'Later, a backend (Supabase) will let the Shortcut send events automatically — the data layer is already ready for it.',
+    importGuideNote: 'Or let the Shortcut POST each finished record straight to your Supabase events table — see docs/shortcuts-supabase.md for the exact URL, headers and JSON.',
     dayBlocks: 'Time Blocks', noData: 'No data for this period',
     totalTime: 'Total Time', timeDistribution: 'Time Distribution', trend: 'Trend', history: 'History',
     sessionsTile: 'Sessions', avgSession: 'Average Session', avgShort: 'avg',
@@ -236,6 +240,10 @@ const I18N = {
     syncErrRls: '被行级安全策略拦截 — 请检查表的 policy',
     syncErrAuth: 'Anon key 被拒绝',
     syncErrUnknown: '同步失败',
+    syncErrDetail: '详情：%s',
+    syncChipFailed: '失败',
+    syncAutoFailed: '云同步失败 — %s',
+    syncPulled: '已从云端拉取 %n 条新记录',
     lastExportNever: '尚未导出',
     lastExport: '上次导出 %s',
     pickColor: '更多颜色',
@@ -262,7 +270,7 @@ const I18N = {
     segDay: '日', segWeek: '周', segMonth: '月', segYear: '年',
     importGuide: '从快捷指令导入',
     importGuideDesc: '让快捷指令生成如下 JSON，保存为文件后点击「导入」。',
-    importGuideNote: '后续接入 Supabase 后端后，快捷指令即可自动写入日程 — 数据层已为此做好准备。',
+    importGuideNote: '也可以让快捷指令在「结束 / 补录」后直接 POST 到你的 Supabase events 表 — URL、Header、JSON 见 docs/shortcuts-supabase.md。',
     dayBlocks: '时间块', noData: '该时段暂无数据',
     totalTime: '总时长', timeDistribution: '时间分布', trend: '趋势', history: '历史记录',
     sessionsTile: '次数', avgSession: '平均时长', avgShort: '平均',
@@ -1063,6 +1071,14 @@ let appTheme = 'graphite';
 let lastSyncAt = Date.now();
 let syncBusy = false;
 let syncedAt = null;
+/* Auto-sync bookkeeping: last error (shown in the chip and More screen) and
+   the last attempt time, used to throttle tab-switch triggered syncs. */
+let syncErrorCode = null;
+let syncErrorDetail = '';
+let lastAutoSyncAttempt = 0;
+/* True while a background (silent) sync is running: the chip keeps showing the
+   last-synced time instead of flickering to "Syncing…" on every tab switch. */
+let syncSilent = false;
 const EXPORT_AT_KEY = 'calendar_export_at_v1';
 
 const DEFAULT_THEME = 'graphite';
@@ -2032,22 +2048,48 @@ function syncStatusLine() {
   const where = cfg ? cfg.url.replace(/^https:\/\//, '') : '';
   const at = syncedAt || SyncService.loadLastSync();
   const when = at ? t('syncLast', { s: formatSyncTime(at) }) : t('syncNever');
+  // A failed sync must say WHY, not just "failed" — the reason is the only
+  // thing that tells the user whether to fix the URL, the key or the table.
+  if (syncErrorCode) {
+    let line = where + ' · ' + t(syncErrorCode);
+    if (syncErrorDetail) line += '\n' + t('syncErrDetail', { s: syncErrorDetail });
+    return line;
+  }
   return where + ' · ' + when;
 }
 
-async function runSync() {
+/**
+ * Pull-then-push against Supabase.
+ *
+ * `silent` is what makes auto-sync usable: a background sync on every tab
+ * switch must not spam toasts when nothing changed, but it must still surface
+ * a failure reason (and any records that actually arrived).
+ */
+async function runSync(opts) {
+  const silent = !!(opts && opts.silent === true);
   if (!SyncService.isConfigured()) {
+    if (silent) return { ok: false, code: 'notConfigured' };
     openSyncSettings();
-    return;
+    return { ok: false, code: 'notConfigured' };
   }
-  if (syncBusy) return;
+  if (syncBusy) return { ok: false, code: 'busy' };
   syncBusy = true;
+  syncSilent = silent;
+  lastAutoSyncAttempt = Date.now();
   renderSyncChip();
   renderMoreScreen();
   try {
     const local = await DataService.exportAll();
     const res = await SyncService.syncNow(local, SyncService.loadConfig());
-    if (!res.ok) { toast(t(res.code)); return; }
+    if (!res.ok) {
+      syncErrorCode = res.code || 'syncErrUnknown';
+      syncErrorDetail = res.detail || '';
+      const msg = SyncService.syncFailText(res);
+      toast(silent ? t('syncAutoFailed', { s: msg }) : msg);
+      return res;
+    }
+    syncErrorCode = null;
+    syncErrorDetail = '';
     if (res.pulled > 0) {
       await DataService.importAll(res.merged);
       await refreshEvents();
@@ -2055,13 +2097,34 @@ async function runSync() {
     syncedAt = res.syncedAt;
     SyncService.saveLastSync(res.syncedAt);
     lastSyncAt = Date.parse(res.syncedAt) || Date.now();
-    toast(res.pushed || res.pulled
-      ? t('syncDone', { u: res.pushed, d: res.pulled })
-      : t('syncNoChanges'));
+    if (silent) {
+      if (res.pulled > 0) toast(t('syncPulled', { n: res.pulled }));
+    } else {
+      toast(res.pushed || res.pulled
+        ? t('syncDone', { u: res.pushed, d: res.pulled })
+        : t('syncNoChanges'));
+    }
+    return res;
   } finally {
     syncBusy = false;
+    syncSilent = false;
     refreshAll();
   }
+}
+
+/* Minimum gap between two background syncs. Short enough that a Shortcut run
+   finished seconds ago shows up when you open the app, long enough that
+   hopping between tabs is not a request storm. */
+const AUTO_SYNC_MIN_GAP_MS = 15000;
+
+/**
+ * Background sync triggered by opening the app or a data tab. Never opens the
+ * settings sheet and never blocks rendering.
+ */
+function autoSync(force) {
+  if (!SyncService.isConfigured() || syncBusy) return;
+  if (!force && Date.now() - lastAutoSyncAttempt < AUTO_SYNC_MIN_GAP_MS) return;
+  runSync({ silent: true }).catch(() => {});
 }
 
 function syncCard() {
@@ -2080,7 +2143,7 @@ function syncCard() {
   const actions = el('div', 'settings-actions');
   if (on) {
     actions.appendChild(segButton(syncBusy ? t('syncing') : t('syncNow'), {
-      icon: I.sync, primary: true, onClick: runSync,
+      icon: I.sync, primary: true, onClick: () => runSync(),
     }));
     actions.appendChild(segButton(t('syncSettings'), { onClick: openSyncSettings }));
   } else {
@@ -2197,9 +2260,12 @@ function openSyncSettings() {
       if (!config) return;
       SyncService.saveConfig(config);
       SyncService.resetClient();
+      syncErrorCode = null;
+      syncErrorDetail = '';
       toast(t('syncSaved'));
       api.close();
       renderMoreScreen();
+      autoSync(true);
     },
   });
   footer.appendChild(saveBtn);
@@ -2212,6 +2278,8 @@ function openSyncSettings() {
         SyncService.resetClient();
         SyncService.clearLastSync();
         syncedAt = null;
+        syncErrorCode = null;
+        syncErrorDetail = '';
         toast(t('syncDisconnected'));
         api.close();
         renderMoreScreen();
@@ -2368,19 +2436,23 @@ function applyStaticTranslations() {
 function renderSyncChip() {
   const on = SyncService.isConfigured();
   const at = syncedAt || SyncService.loadLastSync();
-  const when = syncBusy ? t('syncing') : (on ? formatSyncTime(at) : t('syncOff'));
+  const showBusy = syncBusy && !syncSilent;
+  const when = showBusy
+    ? t('syncing')
+    : (on ? (syncErrorCode ? t('syncChipFailed') : formatSyncTime(at)) : t('syncOff'));
   const text = t('syncChip') + ' · ' + when;
   document.querySelectorAll('.sync-chip-label').forEach((node) => {
     node.textContent = text;
   });
   document.querySelectorAll('.sync-chip').forEach((node) => {
-    node.disabled = !!syncBusy;
-    node.setAttribute('aria-label', t('sync') + ' — ' + when);
+    node.disabled = showBusy;
+    node.setAttribute('aria-label', t('sync') + ' — ' + (syncErrorCode ? t(syncErrorCode) : when));
+    node.classList.toggle('is-error', !!syncErrorCode && !showBusy);
     if (node.id === 'syncChip') node.hidden = !on;
   });
   document.querySelectorAll('.sync-refresh').forEach((node) => {
     node.setAttribute('aria-label', t('refresh'));
-    node.disabled = !!syncBusy;
+    node.disabled = showBusy;
     node.classList.toggle('is-spinning', !!syncBusy);
   });
   document.querySelectorAll('.sync-refresh-label').forEach((node) => {
@@ -3183,13 +3255,6 @@ function fmtTime(mins) {
   return m > 0 ? h + 'h ' + m + 'm' : h + 'h';
 }
 
-function fmtTimeShort(mins) {
-  if (mins < 60) return appLang === 'zh' ? Math.round(mins) + ' 分钟' : Math.round(mins) + 'm';
-  const v = Math.max(0.1, Math.round(mins / 6) / 10); // hours with 1 decimal
-  const s = v % 1 === 0 ? String(v) : v.toFixed(1);
-  return appLang === 'zh' ? s + ' 小时' : s + 'h';
-}
-
 function pctOf(part, total) {
   return total > 0 ? Math.round(part / total * 100) : 0;
 }
@@ -3365,7 +3430,6 @@ function trendSVG(labels, values, opts) {
     const y = padT + innerH * (1 - f);
     grid += '<line x1="' + padL + '" y1="' + y.toFixed(1) + '" x2="' + (W - padR) + '" y2="' + y.toFixed(1) + '" stroke="rgba(60,60,67,0.10)" stroke-width="1"/>';
   });
-  const maxLabel = '<text x="' + padL + '" y="' + (padT + 9) + '" font-size="9.5" fill="#86868B">' + fmtTimeShort(max) + '</text>';
   let marks = '', labelsOut = '', hits = '';
   const bw = Math.max(3, Math.min(13, step * 0.55));
   if (type === 'line') {
@@ -3405,7 +3469,7 @@ function trendSVG(labels, values, opts) {
     });
   }
   const svg = '<svg class="bar-svg trend-svg" viewBox="0 0 ' + W + ' ' + H + '" preserveAspectRatio="xMidYMid meet" role="img" aria-label="trend chart">'
-    + grid + marks + maxLabel + labelsOut + hits + '</svg>';
+    + grid + marks + labelsOut + hits + '</svg>';
   return svgHost(svg);
 }
 
@@ -4306,6 +4370,9 @@ function showTab(tab) {
   // Tapping the active Insights tab again pops the drill-down back to the overview.
   if (tab === 'insights' && wasOnInsights) analyticsReset();
   refreshAll();
+  // The board is read-only: whatever the Shortcut wrote lives upstream, so
+  // opening a data tab is exactly when we want a fresh pull.
+  if (tab === 'today' || tab === 'calendar' || tab === 'insights') autoSync();
 }
 
 /* Slide the shared Liquid Glass active capsule to the active tab. */
@@ -4349,10 +4416,10 @@ function wireNavigation() {
   document.getElementById('btnAddToday').addEventListener('click', () => openEventSheet(null, { date: todayISO() }));
   document.getElementById('insightsBack').addEventListener('click', analyticsBack);
   document.querySelectorAll('.sync-chip').forEach((btn) => {
-    btn.addEventListener('click', runSync);
+    btn.addEventListener('click', () => runSync());
   });
   document.querySelectorAll('.sync-refresh').forEach((btn) => {
-    btn.addEventListener('click', runSync);
+    btn.addEventListener('click', () => runSync());
   });
 }
 
@@ -4425,6 +4492,14 @@ async function init() {
   applyStaticTranslations();
   refreshAll();
   setInterval(updateNow, 30000);
+
+  // Opening (or returning to) the app pulls whatever the Shortcut posted while
+  // it was closed.
+  autoSync(true);
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible') autoSync();
+  });
+  window.addEventListener('focus', () => autoSync());
 
   // Position the Liquid Glass active capsule and keep it aligned.
   requestAnimationFrame(moveTabIndicator);
