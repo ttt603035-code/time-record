@@ -3207,13 +3207,6 @@ function fmtTime(mins) {
   return m > 0 ? h + 'h ' + m + 'm' : h + 'h';
 }
 
-function fmtTimeShort(mins) {
-  if (mins < 60) return appLang === 'zh' ? Math.round(mins) + ' 分钟' : Math.round(mins) + 'm';
-  const v = Math.max(0.1, Math.round(mins / 6) / 10); // hours with 1 decimal
-  const s = v % 1 === 0 ? String(v) : v.toFixed(1);
-  return appLang === 'zh' ? s + ' 小时' : s + 'h';
-}
-
 function pctOf(part, total) {
   return total > 0 ? Math.round(part / total * 100) : 0;
 }
@@ -3389,7 +3382,6 @@ function trendSVG(labels, values, opts) {
     const y = padT + innerH * (1 - f);
     grid += '<line x1="' + padL + '" y1="' + y.toFixed(1) + '" x2="' + (W - padR) + '" y2="' + y.toFixed(1) + '" stroke="rgba(60,60,67,0.10)" stroke-width="1"/>';
   });
-  const maxLabel = '<text x="' + padL + '" y="' + (padT + 9) + '" font-size="9.5" fill="#86868B">' + fmtTimeShort(max) + '</text>';
   let marks = '', labelsOut = '', hits = '';
   const bw = Math.max(3, Math.min(13, step * 0.55));
   if (type === 'line') {
@@ -3429,7 +3421,7 @@ function trendSVG(labels, values, opts) {
     });
   }
   const svg = '<svg class="bar-svg trend-svg" viewBox="0 0 ' + W + ' ' + H + '" preserveAspectRatio="xMidYMid meet" role="img" aria-label="trend chart">'
-    + grid + marks + maxLabel + labelsOut + hits + '</svg>';
+    + grid + marks + labelsOut + hits + '</svg>';
   return svgHost(svg);
 }
 
