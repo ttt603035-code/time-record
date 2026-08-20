@@ -25,6 +25,9 @@
 const STORAGE_KEY = 'calendar_events_v1';
 const CATEGORY_KEY = 'calendar_categories_v1';
 const SETTINGS_KEY = 'calendar_settings_v1';
+const TRASH_KEY = 'calendar_trash_v1';
+/** Days a deleted event stays in the Trash before it is purged automatically. */
+const TRASH_RETENTION_DAYS = 2;
 
 const MONTHS_SHORT = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 const MONTHS_LONG = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
@@ -160,8 +163,8 @@ const I18N = {
     title: 'Title', date: 'Date', start: 'Start', end: 'End', category: 'Category', color: 'Color', note: 'Note',
     titlePlaceholder: 'e.g. CET-6 Reading', categoryPlaceholder: 'e.g. English', notePlaceholder: 'Optional',
     titleRequired: 'Please enter a title.',
-    deleteEvent: 'Delete Event', deleteEventTitle: 'Delete event?', deleteEventMsg: 'will be permanently removed.',
-    eventSaved: 'Event saved', eventAdded: 'Event added', eventDeleted: 'Event deleted',
+    deleteEvent: 'Delete Event', deleteEventTitle: 'Delete event?', deleteEventMsg: 'will be moved to the Trash.',
+    eventSaved: 'Event saved', eventAdded: 'Event added', eventDeleted: 'Moved to Trash',
     clearAllTitle: 'Clear all data?', clearAllMsg: 'All events on this device will be permanently removed.',
     dataCleared: 'All data cleared',
     exported: 'Exported %n events', noExport: 'No events to export', imported: 'Imported %n events', importFailed: 'Import failed — not valid JSON',
@@ -186,6 +189,20 @@ const I18N = {
     topTasks: 'Top Tasks', tasksCount: '%n tasks', viewDetails: 'View Details', allCategories: 'All Categories',
     noSessions: 'No sessions in this period', back: 'Back',
     duration: 'Duration', event: 'Event', edit: 'Edit',
+    refreshing: 'Refreshing the app…',
+    search: 'Search', searchPlaceholder: 'Search title, category or note…',
+    searchHint: 'Type a keyword to find matching events.',
+    searchNone: 'No matching events',
+    searchCount: '%n results', searchOne: '1 result',
+    trash: 'Trash', trashEmptyState: 'Trash is empty.',
+    restore: 'Restore', deleteForever: 'Delete forever', emptyTrash: 'Empty trash',
+    trashAutoNote: 'Deleted events stay here for %n days, then are cleared automatically. While an event is in the Trash, sync will not bring it back.',
+    eventRestored: 'Event restored', trashEmptied: 'Trash emptied',
+    deleteForeverTitle: 'Delete forever?',
+    deleteForeverMsg: 'will be permanently removed, here and in the cloud.',
+    emptyTrashTitle: 'Empty trash?',
+    emptyTrashMsg: 'All events in the Trash will be permanently removed, here and in the cloud.',
+    templateAppliedN: 'Template saved — %n events recolored',
   },
   zh: {
     calendar: '日历', today: '今天', insights: '洞悉', more: '更多',
@@ -245,8 +262,8 @@ const I18N = {
     title: '标题', date: '日期', start: '开始', end: '结束', category: '分类', color: '颜色', note: '备注',
     titlePlaceholder: '例如：CET-6 阅读', categoryPlaceholder: '例如：英语', notePlaceholder: '可选',
     titleRequired: '请输入标题。',
-    deleteEvent: '删除日程', deleteEventTitle: '删除日程？', deleteEventMsg: '将被永久移除。',
-    eventSaved: '已保存', eventAdded: '已添加', eventDeleted: '已删除',
+    deleteEvent: '删除日程', deleteEventTitle: '删除日程？', deleteEventMsg: '将被移入垃圾箱。',
+    eventSaved: '已保存', eventAdded: '已添加', eventDeleted: '已移入垃圾箱',
     clearAllTitle: '清空全部数据？', clearAllMsg: '此设备上的所有日程将被永久移除。',
     dataCleared: '已清空全部数据',
     exported: '已导出 %n 个日程', noExport: '没有可导出的日程', imported: '已导入 %n 个日程', importFailed: '导入失败 — JSON 无效',
@@ -271,6 +288,20 @@ const I18N = {
     topTasks: '任务排行', tasksCount: '%n 个任务', viewDetails: '查看详情', allCategories: '全部分类',
     noSessions: '该时段暂无记录', back: '返回',
     duration: '时长', event: '日程', edit: '编辑',
+    refreshing: '正在刷新应用…',
+    search: '搜索', searchPlaceholder: '搜索标题、分类或备注…',
+    searchHint: '输入关键字查找日程。',
+    searchNone: '没有匹配的日程',
+    searchCount: '%n 条结果', searchOne: '1 条结果',
+    trash: '垃圾箱', trashEmptyState: '垃圾箱是空的。',
+    restore: '恢复', deleteForever: '彻底删除', emptyTrash: '清空垃圾箱',
+    trashAutoNote: '删除的日程会在这里保留 %n 天，之后自动清除。日程在垃圾箱期间，同步不会把它拉回来。',
+    eventRestored: '日程已恢复', trashEmptied: '垃圾箱已清空',
+    deleteForeverTitle: '彻底删除？',
+    deleteForeverMsg: '将被永久删除（包括云端副本）。',
+    emptyTrashTitle: '清空垃圾箱？',
+    emptyTrashMsg: '垃圾箱中的所有日程将被永久删除（包括云端副本）。',
+    templateAppliedN: '模板已保存 — 已统一 %n 个日程的颜色',
   },
 };
 
@@ -542,21 +573,35 @@ const StorageService = (() => {
 
   async function deleteEvent(id) {
     const events = await getEvents();
+    const victim = events.find((x) => x.id === id);
     await saveEvents(events.filter((x) => x.id !== id));
+    if (victim) {
+      // Tombstone: park the event in the Trash so sync can propagate the
+      // deletion instead of resurrecting the row from the cloud.
+      const trash = await getTrash();
+      const rest = trash.filter((x) => x.id !== id);
+      rest.unshift({ id: id, deletedAt: new Date().toISOString(), cloudDeleted: false, event: victim });
+      await saveTrash(rest);
+    }
     return true;
   }
 
   async function importEvents(data) {
     const events = await getEvents();
     const incoming = normalizeImport(data);
+    const trash = await getTrash();
+    const trashIds = new Set(trash.map((x) => x.id));
     const map = new Map(events.map((x) => [x.id, x]));
-    let added = 0, updated = 0;
+    let added = 0, updated = 0, skipped = 0;
     incoming.forEach((ev) => {
+      // An id sitting in the Trash was deleted on purpose — a re-run of the
+      // same Shortcut/file import must not quietly bring it back.
+      if (trashIds.has(ev.id)) { skipped++; return; }
       if (map.has(ev.id)) updated++; else added++;
       map.set(ev.id, ev);
     });
     await saveEvents([...map.values()]);
-    return { added, updated };
+    return { added, updated, skipped };
   }
 
   async function exportEvents() {
@@ -574,6 +619,85 @@ const StorageService = (() => {
       catch (err) { /* ignore */ }
     }
     return true;
+  }
+
+  // ── Trash (deleted-event tombstones) ──
+  let memoryTrash = null;
+
+  async function getTrash() {
+    if (memoryTrash) return memoryTrash.slice();
+    if (!ls) { memoryTrash = []; return []; }
+    let raw = null;
+    try { raw = ls.getItem(TRASH_KEY); } catch (err) { raw = null; }
+    let arr = [];
+    if (raw) { try { arr = JSON.parse(raw); } catch (err) { arr = []; } }
+    memoryTrash = Array.isArray(arr)
+      ? arr
+          .filter((x) => x && typeof x === 'object' && x.event && typeof x.event === 'object')
+          .map((x) => ({
+            id: String(x.id || x.event.id || ''),
+            deletedAt: (typeof x.deletedAt === 'string' && !Number.isNaN(Date.parse(x.deletedAt)))
+              ? x.deletedAt : new Date().toISOString(),
+            cloudDeleted: !!x.cloudDeleted,
+            event: normalizeEvent(x.event),
+          }))
+          .filter((x) => x.id)
+      : [];
+    return memoryTrash.slice();
+  }
+
+  async function saveTrash(list) {
+    memoryTrash = list.slice();
+    if (!ls) return false;
+    try { ls.setItem(TRASH_KEY, JSON.stringify(memoryTrash)); return true; } catch (err) { return false; }
+  }
+
+  async function restoreEvent(id) {
+    const trash = await getTrash();
+    const item = trash.find((x) => x.id === id);
+    if (!item) return null;
+    await saveTrash(trash.filter((x) => x.id !== id));
+    // Bump updatedAt so last-write-wins pushes the restore to the cloud.
+    const ev = normalizeEvent(Object.assign({}, item.event, { updatedAt: new Date().toISOString() }));
+    await updateEvent(ev);
+    return ev;
+  }
+
+  async function purgeTrash(id) {
+    const trash = await getTrash();
+    await saveTrash(trash.filter((x) => x.id !== id));
+    return true;
+  }
+
+  async function emptyTrash() {
+    await saveTrash([]);
+    return true;
+  }
+
+  async function markTrashCloudDeleted(ids) {
+    const set = new Set(ids);
+    const trash = await getTrash();
+    await saveTrash(trash.map((x) => (set.has(x.id) ? Object.assign({}, x, { cloudDeleted: true }) : x)));
+    return true;
+  }
+
+  /**
+   * Drop tombstones older than TRASH_RETENTION_DAYS. When sync is configured,
+   * an entry is only dropped after a sync has erased its cloud copy —
+   * otherwise the next pull would hand the "deleted" event straight back.
+   */
+  async function purgeExpiredTrash(requireCloudDeleted) {
+    const trash = await getTrash();
+    const cutoff = Date.now() - TRASH_RETENTION_DAYS * 24 * 60 * 60 * 1000;
+    const keep = trash.filter((x) => {
+      const at = Date.parse(x.deletedAt);
+      const expired = !Number.isNaN(at) && at < cutoff;
+      if (!expired) return true;
+      if (requireCloudDeleted && !x.cloudDeleted) return true;
+      return false;
+    });
+    if (keep.length !== trash.length) await saveTrash(keep);
+    return trash.length - keep.length;
   }
 
   // ── Categories (event templates) ──
@@ -649,6 +773,12 @@ const StorageService = (() => {
     importEvents,
     exportEvents,
     clearAll,
+    getTrash,
+    restoreEvent,
+    purgeTrash,
+    emptyTrash,
+    markTrashCloudDeleted,
+    purgeExpiredTrash,
     getCategories,
     saveCategories,
     backupKeys,
@@ -677,6 +807,12 @@ const DataService = {
   importAll: (data) => StorageService.importEvents(data),
   exportAll: () => StorageService.exportEvents(),
   clear: () => StorageService.clearAll(),
+  fetchTrash: () => StorageService.getTrash(),
+  restoreTrash: (id) => StorageService.restoreEvent(id),
+  purgeTrash: (id) => StorageService.purgeTrash(id),
+  emptyTrash: () => StorageService.emptyTrash(),
+  markTrashSynced: (ids) => StorageService.markTrashCloudDeleted(ids),
+  purgeExpiredTrash: (requireCloudDeleted) => StorageService.purgeExpiredTrash(requireCloudDeleted),
   fetchCategories: () => StorageService.getCategories(),
   saveCategories: (list) => StorageService.saveCategories(list),
   getSetting: (key) => StorageService.getSetting(key),
@@ -799,9 +935,9 @@ const SyncService = (() => {
   /**
    * Last-write-wins merge.
    *
-   * Deletions are deliberately not synced: without tombstones, "row missing
-   * upstream" and "row deleted upstream" are indistinguishable, and guessing
-   * wrong destroys data silently.
+   * Deletions ARE handled, via local tombstones: the caller passes the ids
+   * sitting in the Trash, syncNow deletes those rows upstream and excludes
+   * them from the pull, so a deleted event no longer comes back.
    */
   function mergeEvents(localList, remoteList) {
     const local = new Map(localList.map((e) => [e.id, e]));
@@ -877,7 +1013,7 @@ const SyncService = (() => {
     }
   }
 
-  async function syncNow(localEvents, rawConfig) {
+  async function syncNow(localEvents, rawConfig, tombstoneIds) {
     const { ok, errors, config } = validateConfig(rawConfig || loadConfig() || {});
     if (!ok) return { ok: false, code: Object.values(errors)[0] };
     try {
@@ -888,7 +1024,22 @@ const SyncService = (() => {
         .eq('user_key', config.userKey);
       if (error) throw error;
 
-      const remote = (data || []).map(fromRow);
+      const trashIds = new Set(tombstoneIds || []);
+      const remoteAll = (data || []).map(fromRow);
+
+      // Propagate local deletions: erase the cloud copies of trashed events.
+      const deadRemote = remoteAll.filter((e) => trashIds.has(e.id)).map((e) => e.id);
+      if (deadRemote.length) {
+        const { error: delErr } = await supabase
+          .from(SYNC_TABLE)
+          .delete()
+          .eq('user_key', config.userKey)
+          .in('id', deadRemote);
+        if (delErr) throw delErr;
+      }
+
+      // And never pull a trashed event back down.
+      const remote = remoteAll.filter((e) => !trashIds.has(e.id));
       const { merged, toPush, toPull } = mergeEvents(localEvents, remote);
 
       if (toPush.length) {
@@ -904,8 +1055,27 @@ const SyncService = (() => {
         merged,
         pushed: toPush.length,
         pulled: toPull.length,
+        deleted: deadRemote.length,
         syncedAt: new Date().toISOString(),
       };
+    } catch (err) {
+      return { ok: false, ...classifyError(err) };
+    }
+  }
+
+  /** Best-effort remote delete for "delete forever" / "empty trash". */
+  async function deleteRemote(ids) {
+    const { ok, config } = validateConfig(loadConfig() || {});
+    if (!ok || !ids || !ids.length) return { ok: false };
+    try {
+      const supabase = await getClient(config);
+      const { error } = await supabase
+        .from(SYNC_TABLE)
+        .delete()
+        .eq('user_key', config.userKey)
+        .in('id', ids);
+      if (error) throw error;
+      return { ok: true };
     } catch (err) {
       return { ok: false, ...classifyError(err) };
     }
@@ -939,7 +1109,7 @@ const SyncService = (() => {
   return {
     loadConfig, saveConfig, clearConfig, isConfigured, validateConfig,
     toRow, fromRow, mergeEvents, classifyError,
-    testConnection, syncNow, resetClient,
+    testConnection, syncNow, deleteRemote, resetClient,
     loadLastSync, saveLastSync, clearLastSync,
   };
 })();
@@ -1044,6 +1214,7 @@ const state = {
   viewMonth: new Date().getMonth(),
   selectedDate: todayISO(),
   events: [],
+  trash: [],
   categories: [],
   tab: 'calendar',
 };
@@ -1092,6 +1263,8 @@ const I = {
   pencil: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15.5 5.5l3 3L8 19H5v-3L15.5 5.5z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/><path d="M12.8 8.2l3 3" fill="none" stroke="currentColor" stroke-width="1.8"/></svg>',
   tag: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 4h7.2a1 1 0 0 1 .7.3l8.8 8.8a1 1 0 0 1 0 1.4l-5.2 5.2a1 1 0 0 1-1.4 0l-8.8-8.8a1 1 0 0 1-.3-.7V4z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/><circle cx="9.5" cy="9.5" r="1.3" fill="currentColor"/></svg>',
   refresh: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12a9 9 0 1 1-9-9c2.52 0 4.93 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/></svg>',
+  search: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.6-3.6"/></svg>',
+  restore: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12a9 9 0 1 0 3-6.7L3.5 7.5"/><path d="M3 3v5h5"/><path d="M12 8v4l3 2"/></svg>',
 };
 
 const ICON_CALENDAR_EMPTY = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="3.5" y="5" width="17" height="15.5" rx="3.5"/><path d="M3.5 9.5h17"/><path d="M8.2 2.8v3.4M15.8 2.8v3.4"/></svg>';
@@ -1894,6 +2067,71 @@ function updateNow() {
 }
 
 /* ============================================================
+   16b. SEARCH  (keyword → matching events)
+   ============================================================ */
+
+function eventSearchRow(e, onPick) {
+  const row = el('button', 'tpl-row sr-row');
+  row.type = 'button';
+  const dot = el('span', 'tpl-dot');
+  dot.style.setProperty('--c', resolveColor(e.color));
+  const main = el('span', 'tpl-name sr-main');
+  main.appendChild(el('span', 'sr-title', e.title));
+  const bits = [formatShortDate(e.date), e.startTime + '–' + e.endTime];
+  if (e.category) bits.push(e.category);
+  main.appendChild(el('span', 'sr-meta', bits.join(' · ')));
+  const chev = el('span', 'tpl-chev');
+  chev.innerHTML = I.chevR;
+  row.append(dot, main, chev);
+  row.addEventListener('click', onPick);
+  return row;
+}
+
+function openSearchModal() {
+  const body = el('div', 'search-body');
+  const input = el('input', 'text-input search-input');
+  input.type = 'search';
+  input.placeholder = t('searchPlaceholder');
+  input.autocomplete = 'off';
+  input.setAttribute('enterkeyhint', 'search');
+  const meta = el('p', 'search-meta', t('searchHint'));
+  const results = el('div', 'search-results');
+  body.append(input, meta, results);
+
+  function run() {
+    const q = input.value.trim().toLowerCase();
+    results.innerHTML = '';
+    if (!q) { meta.textContent = t('searchHint'); return; }
+    const words = q.split(/\s+/);
+    const matches = state.events
+      .filter((e) => {
+        const hay = (e.title + ' ' + (e.category || '') + ' ' + (e.note || '') + ' ' + e.date).toLowerCase();
+        return words.every((w) => hay.indexOf(w) >= 0);
+      })
+      .sort((a, b) => (b.date + b.startTime).localeCompare(a.date + a.startTime));
+    meta.textContent = matches.length
+      ? (matches.length === 1 ? t('searchOne') : t('searchCount', { n: matches.length }))
+      : t('searchNone');
+    matches.slice(0, 100).forEach((e) => {
+      results.appendChild(eventSearchRow(e, () => {
+        api.close();
+        const p = parseISO(e.date);
+        state.viewYear = p.y;
+        state.viewMonth = p.m;
+        state.selectedDate = e.date;
+        if (state.tab !== 'calendar') showTab('calendar');
+        else refreshCalendar();
+      }));
+    });
+  }
+
+  input.addEventListener('input', run);
+  const api = openStudyModal({ title: t('search'), body });
+  setTimeout(() => { try { input.focus(); } catch (err) { /* ignore */ } }, 80);
+  return api;
+}
+
+/* ============================================================
    17. MORE SCREEN  (Data / About)
    ============================================================ */
 
@@ -1999,12 +2237,17 @@ async function runSync() {
   renderMoreScreen();
   try {
     const local = await DataService.exportAll();
-    const res = await SyncService.syncNow(local, SyncService.loadConfig());
+    const trash = await DataService.fetchTrash();
+    const trashIds = trash.map((x) => x.id);
+    const res = await SyncService.syncNow(local, SyncService.loadConfig(), trashIds);
     if (!res.ok) { toast(t(res.code)); return; }
     if (res.pulled > 0) {
       await DataService.importAll(res.merged);
       await refreshEvents();
     }
+    // The cloud copies of everything in the Trash are gone now, so these
+    // tombstones may expire safely.
+    if (trashIds.length) await DataService.markTrashSynced(trashIds);
     syncedAt = res.syncedAt;
     SyncService.saveLastSync(res.syncedAt);
     lastSyncAt = Date.parse(res.syncedAt) || Date.now();
@@ -2015,6 +2258,30 @@ async function runSync() {
     syncBusy = false;
     refreshAll();
   }
+}
+
+/**
+ * The Refresh chip reloads the APP itself (not the data): a home-screen
+ * install on iOS caches index.html/app.js/styles.css aggressively, so after a
+ * deploy the old version keeps showing up. Re-download the shell with
+ * cache: 'reload' — which replaces the HTTP-cache entries — then reload.
+ */
+let refreshBusy = false;
+async function hardRefresh() {
+  if (refreshBusy) return;
+  refreshBusy = true;
+  document.querySelectorAll('.sync-refresh').forEach((b) => {
+    b.disabled = true;
+    b.classList.add('is-spinning');
+  });
+  toast(t('refreshing'));
+  const urls = [window.location.href.split('#')[0]];
+  document.querySelectorAll('link[rel="stylesheet"]').forEach((n) => { if (n.href) urls.push(n.href); });
+  document.querySelectorAll('script[src]').forEach((n) => { if (n.src) urls.push(n.src); });
+  try {
+    await Promise.all(urls.map((u) => fetch(u, { cache: 'reload' }).catch(() => null)));
+  } catch (err) { /* offline — reload will serve the cached copy anyway */ }
+  window.location.reload();
 }
 
 function syncCard() {
@@ -2201,6 +2468,14 @@ function renderMoreScreen() {
   actions.appendChild(segButton(t('import'), { icon: I.down, onClick: importData }));
   actions.appendChild(segButton(t('clearAll'), { icon: I.trash, danger: true, onClick: clearAllData }));
   dataCard.appendChild(actions);
+  const dataRows = el('div', 'settings-rows');
+  dataRows.appendChild(settingsRow({
+    icon: I.trash,
+    label: t('trash'),
+    value: state.trash.length ? String(state.trash.length) : '',
+    onClick: openTrashModal,
+  }));
+  dataCard.appendChild(dataRows);
   dataCard.appendChild(el('p', 'export-meta', formatExportTime(loadLastExport())));
   dataCard.appendChild(storageKeysBlock());
   groups.appendChild(dataCard);
@@ -2333,11 +2608,16 @@ function renderSyncChip() {
   });
   document.querySelectorAll('.sync-refresh').forEach((node) => {
     node.setAttribute('aria-label', t('refresh'));
-    node.disabled = !!syncBusy;
-    node.classList.toggle('is-spinning', !!syncBusy);
+    if (!refreshBusy) {
+      node.disabled = false;
+      node.classList.remove('is-spinning');
+    }
   });
   document.querySelectorAll('.sync-refresh-label').forEach((node) => {
     node.textContent = t('refresh');
+  });
+  document.querySelectorAll('.search-chip').forEach((node) => {
+    node.setAttribute('aria-label', t('search'));
   });
 }
 
@@ -2391,6 +2671,135 @@ function showStorageInfo() {
 }
 
 /* ── Event templates (categories) — editable in a StudyHub-style popup ── */
+
+/* ── Trash — deleted events wait here before final removal ── */
+
+let trashApi = null;
+
+function openTrashModal() {
+  if (trashApi && !trashApi.closed) {
+    trashApi.setContent(buildTrashBody(), buildTrashFooter(), t('trash'));
+    return;
+  }
+  trashApi = openStudyModal({
+    title: t('trash'),
+    body: buildTrashBody(),
+    footer: buildTrashFooter(),
+    onClose: () => { trashApi = null; },
+  });
+}
+
+function rerenderTrashModal() {
+  if (trashApi && !trashApi.closed) {
+    trashApi.setContent(buildTrashBody(), buildTrashFooter(), t('trash'));
+  }
+}
+
+function buildTrashBody() {
+  const body = el('div');
+  const list = el('div', 'tpl-list');
+  body.appendChild(list);
+
+  if (!state.trash.length) {
+    list.appendChild(el('div', 'tpl-empty', t('trashEmptyState')));
+    return body;
+  }
+
+  state.trash.forEach((item) => {
+    const e = item.event;
+    const row = el('div', 'tpl-row trash-row');
+    const dot = el('span', 'tpl-dot');
+    dot.style.setProperty('--c', resolveColor(e.color));
+    const main = el('span', 'tpl-name sr-main');
+    main.appendChild(el('span', 'sr-title', e.title));
+    const bits = [formatShortDate(e.date), e.startTime + '–' + e.endTime];
+    if (e.category) bits.push(e.category);
+    main.appendChild(el('span', 'sr-meta', bits.join(' · ')));
+
+    const restoreBtn = el('button', 'tpl-del-btn trash-restore-btn');
+    restoreBtn.type = 'button';
+    restoreBtn.setAttribute('aria-label', t('restore') + ' ' + e.title);
+    restoreBtn.title = t('restore');
+    restoreBtn.innerHTML = I.restore;
+    restoreBtn.addEventListener('click', async () => {
+      await DataService.restoreTrash(item.id);
+      await refreshEvents();
+      refreshAll();
+      rerenderTrashModal();
+      toast(t('eventRestored'));
+    });
+
+    const delBtn = el('button', 'tpl-del-btn');
+    delBtn.type = 'button';
+    delBtn.setAttribute('aria-label', t('deleteForever') + ' ' + e.title);
+    delBtn.title = t('deleteForever');
+    delBtn.innerHTML = I.trash;
+    delBtn.addEventListener('click', () => {
+      showDialog({
+        title: t('deleteForeverTitle'),
+        message: '“' + e.title + '” ' + t('deleteForeverMsg'),
+        actions: [
+          { label: t('cancel') },
+          {
+            label: t('delete'),
+            danger: true,
+            onClick: async () => {
+              // Erase the cloud copy too (best-effort) so it cannot be pulled back.
+              if (!item.cloudDeleted && SyncService.isConfigured()) {
+                await SyncService.deleteRemote([item.id]);
+              }
+              await DataService.purgeTrash(item.id);
+              await refreshEvents();
+              refreshAll();
+              rerenderTrashModal();
+            },
+          },
+        ],
+      });
+    });
+
+    row.append(dot, main, restoreBtn, delBtn);
+    list.appendChild(row);
+  });
+  return body;
+}
+
+function buildTrashFooter() {
+  const foot = el('div', 'study-modal-foot');
+  const hint = el('span', 'modal-hint', t('trashAutoNote', { n: TRASH_RETENTION_DAYS }));
+  foot.appendChild(hint);
+  if (state.trash.length) {
+    foot.appendChild(segButton(t('emptyTrash'), {
+      danger: true,
+      icon: I.trash,
+      onClick: () => {
+        showDialog({
+          title: t('emptyTrashTitle'),
+          message: t('emptyTrashMsg'),
+          actions: [
+            { label: t('cancel') },
+            {
+              label: t('clear'),
+              danger: true,
+              onClick: async () => {
+                const pending = state.trash.filter((x) => !x.cloudDeleted).map((x) => x.id);
+                if (pending.length && SyncService.isConfigured()) {
+                  await SyncService.deleteRemote(pending);
+                }
+                await DataService.emptyTrash();
+                await refreshEvents();
+                refreshAll();
+                rerenderTrashModal();
+                toast(t('trashEmptied'));
+              },
+            },
+          ],
+        });
+      },
+    }));
+  }
+  return foot;
+}
 
 let tplApi = null;
 
@@ -2520,9 +2929,22 @@ function showTemplateForm(cat) {
       else state.categories.push(catObj);
     }
     await DataService.saveCategories(state.categories);
+    // Colour unification: every existing event in this category adopts the
+    // template's (possibly new) colour, so the calendar stays consistent.
+    const nameLc = catObj.name.toLowerCase();
+    const now = new Date().toISOString();
+    const touched = state.events
+      .filter((e) => (e.category || '').toLowerCase() === nameLc && e.color !== catObj.color)
+      .map((e) => Object.assign({}, e, { color: catObj.color, updatedAt: now }));
+    if (touched.length) {
+      await DataService.importAll(touched);
+      await refreshEvents();
+    }
     openTemplatesModal();
     refreshAll();
-    toast(isEdit ? t('templateSaved') : t('templateAdded'));
+    toast(touched.length
+      ? t('templateAppliedN', { n: touched.length })
+      : (isEdit ? t('templateSaved') : t('templateAdded')));
   });
 }
 
@@ -2578,22 +3000,32 @@ async function importPayload(data) {
   const categories = data && Array.isArray(data.categories) ? data.categories : [];
   if (!events.length && !categories.length) throw new Error('No importable records');
 
-  const res = events.length
-    ? await DataService.importAll(events)
-    : { added: 0, updated: 0 };
-
-  // Linked import: categories can travel in the same backup envelope.
+  // Linked import: categories can travel in the same backup envelope. They
+  // only ADD templates that do not exist here yet — the colours you have
+  // edited on this device always beat the colours stored in an old backup.
   if (categories.length) {
     const merged = state.categories.slice();
     categories.forEach((item) => {
       if (!item || typeof item !== 'object') return;
       const cat = normalizeCategory(item);
       const i = merged.findIndex((x) => x.name.toLowerCase() === cat.name.toLowerCase());
-      if (i >= 0) merged[i] = cat;
-      else merged.push(cat);
+      if (i < 0) merged.push(cat);
     });
     await DataService.saveCategories(merged);
+    await refreshCategories();
   }
+
+  // Colour unification: an imported event whose category matches a template
+  // (by name, case-insensitive) always takes the template's CURRENT colour.
+  const byName = new Map(state.categories.map((c) => [c.name.toLowerCase(), c]));
+  const unified = events.map((e) => {
+    const cat = byName.get((e.category || '').toLowerCase());
+    return cat ? Object.assign({}, e, { color: cat.color }) : e;
+  });
+
+  const res = unified.length
+    ? await DataService.importAll(unified)
+    : { added: 0, updated: 0 };
 
   await refreshEvents();
   await refreshCategories();
@@ -4237,6 +4669,7 @@ function refreshAll() {
 
 async function refreshEvents() {
   state.events = await DataService.fetchAll();
+  state.trash = await DataService.fetchTrash();
   lastSyncAt = Date.now();
 }
 
@@ -4304,8 +4737,13 @@ function wireNavigation() {
   document.querySelectorAll('.sync-chip').forEach((btn) => {
     btn.addEventListener('click', runSync);
   });
+  // Refresh = reload the app shell (pick up the newest deployed version).
+  // Cloud sync stays on the Sync chip only.
   document.querySelectorAll('.sync-refresh').forEach((btn) => {
-    btn.addEventListener('click', runSync);
+    btn.addEventListener('click', hardRefresh);
+  });
+  document.querySelectorAll('.search-chip').forEach((btn) => {
+    btn.addEventListener('click', openSearchModal);
   });
 }
 
@@ -4355,6 +4793,10 @@ async function init() {
   preventDoubleTapZoom();
   wireImportFile();
   enableSwipe();
+
+  // Trash housekeeping: silently drop tombstones past their retention window
+  // (kept until a sync has erased their cloud copies, when sync is on).
+  await DataService.purgeExpiredTrash(SyncService.isConfigured());
 
   await refreshEvents();
   await refreshCategories();

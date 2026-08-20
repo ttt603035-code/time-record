@@ -38,8 +38,8 @@ no sidebar, no dashboard, no StudyHub navigation.
 13. Demo data (seeded **once**, never overwrites)
 14. Calendar grid (+ swipe)
 15. Day detail
-16. Today screen
-17. More screen (Data / About)
+16. Today screen (+ 16b keyword search)
+17. More screen (Data / Trash / About)
 18. Month/year selector
 19. Event form sheet (add/edit/delete)
 20. Navigation & rendering

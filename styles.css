@@ -2000,6 +2000,60 @@ button.chip.sync-refresh {
 button.chip.sync-refresh svg { width: 14px; height: 14px; }
 button.chip.sync-refresh.is-spinning svg { animation: sync-spin 1s linear infinite; }
 
+/* Search chip — icon-only, same grey chrome as the other topbar chips. */
+button.chip.search-chip {
+  width: auto;
+  height: auto;
+  min-width: 0;
+  flex: 0 0 auto;
+  padding: 6px 9px;
+  color: var(--text-2);
+  border-color: var(--border);
+  cursor: pointer;
+}
+button.chip.search-chip svg { width: 14px; height: 14px; }
+button.chip.search-chip:active { opacity: 0.55; }
+
+/* ───────────────────────── Search modal ───────────────────────── */
+
+.search-input { width: 100%; }
+.search-meta {
+  font-size: 12px;
+  color: var(--text-3);
+  margin: 10px 2px 6px;
+}
+.search-results { display: flex; flex-direction: column; }
+.sr-main {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+.sr-title {
+  font-size: 15px;
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.sr-meta {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-3);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* ───────────────────────── Trash ───────────────────────── */
+
+.trash-row { cursor: default; }
+.trash-restore-btn:hover {
+  background: var(--surface-2);
+  color: var(--text);
+}
+
+
 .settings-title-row {
   display: flex;
   align-items: center;
