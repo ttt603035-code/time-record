@@ -10,7 +10,7 @@ import { toast } from '@/lib/overlays.js';
 import { DEFAULT_THEME, applyTheme } from '@/lib/themes.js';
 import { openSyncSettings } from '@/components/SyncSettingsModal.jsx';
 import {
-  clearLastSync, isConfigured, loadConfig, loadLastSync, saveLastSync, syncNow,
+  clearLastSync, isConfigured, loadConfig, loadLastSync, saveLastSync, syncFailText, syncNow,
 } from '@/lib/supabase-sync.js';
 
 /**
@@ -193,9 +193,8 @@ export function useAppData() {
       const res = await syncNow(local, loadConfig());
       if (!res.ok) {
         setSyncError({ code: res.code || 'syncErrUnknown', detail: res.detail || '' });
-        toast(silent
-          ? t('syncAutoFailed', { s: t(res.code || 'syncErrUnknown') })
-          : t(res.code || 'syncErrUnknown'));
+        const msg = syncFailText(res, t);
+        toast(silent ? t('syncAutoFailed', { s: msg }) : msg);
         return;
       }
       setSyncError(null);

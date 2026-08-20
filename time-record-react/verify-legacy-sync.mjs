@@ -99,6 +99,19 @@ const row = SyncService.toRow(ev('c','2026-08-18T10:00:00Z','x'), 'u1');
 check('Legacy row mapping matches the React one',
   row.user_key==='u1' && row.start_time==='09:00' && !('startTime' in row));
 
+check('Legacy REST path collapses to origin',
+  SyncService.validateConfig({url:'https://abc.supabase.co/rest/v1',anonKey:'eyJ',userKey:'p'}).config.url === 'https://abc.supabase.co');
+check('Legacy rejects dashboard host',
+  SyncService.validateConfig({url:'https://supabase.com/dashboard',anonKey:'eyJ',userKey:'p'}).errors.url === 'syncErrUrlShape');
+check('Legacy strips Bearer prefix',
+  SyncService.validateConfig({url:'https://abc.supabase.co',anonKey:'Bearer eyJhbG',userKey:'p'}).config.anonKey === 'eyJhbG');
+check('Legacy JWS is auth',
+  SyncService.classifyError(new Error('JWSError JWSInvalidSignature')).code === 'syncErrAuth');
+check('Legacy PGRST205 is missing table',
+  SyncService.classifyError({code:'PGRST205', message:'schema cache'}).code === 'syncErrNoTable');
+check('Legacy SQL drops policy first',
+  (doc.querySelector('.sync-sql .json-block')?.textContent || '').includes('drop policy if exists'));
+
 /* ── Sync chip in the legacy topbar ── */
 {
   // Configure sync and re-render More, then assert the chip appears.
