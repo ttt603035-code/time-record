@@ -518,7 +518,7 @@ textarea:focus-visible,
 
 .settings-head { margin-bottom: 12px; }
 .settings-title { font-size: 15px; font-weight: 700; letter-spacing: -0.01em; }
-.settings-desc { font-size: 12px; color: var(--text-3); line-height: 1.5; margin-top: 3px; }
+.settings-desc { font-size: 12px; color: var(--text-3); line-height: 1.5; margin-top: 3px; white-space: pre-line; }
 
 .stat-row { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; margin-bottom: 12px; }
 .stat-tile {
@@ -2297,6 +2297,11 @@ button.chip.sync-refresh.is-spinning svg { animation: sync-spin 1s linear infini
   transition: opacity 0.15s ease;
 }
 .sync-chip:active { opacity: 0.6; }
+/* A failed sync is a state the user has to act on — colour it, do not hide it. */
+.sync-chip.is-error {
+  color: var(--danger, #d7263d);
+  border-color: var(--danger, #d7263d);
+}
 .sync-chip[disabled] { opacity: 0.6; }
 .sync-chip-icon {
   display: inline-flex;

@@ -27,6 +27,11 @@ import {
  * Data always flows UI → DataService → StorageService. This hook never
  * touches localStorage directly.
  */
+/* Minimum gap between two background syncs: short enough that a Shortcut run
+   finished seconds ago shows up on open, long enough that hopping between tabs
+   is not a request storm. */
+const AUTO_SYNC_MIN_GAP_MS = 15000;
+
 export function useAppData() {
   const [events, setEvents] = useState([]);
   const [categories, setCategories] = useState([]);
@@ -36,8 +41,16 @@ export function useAppData() {
   const [lastCloudSync, setLastCloudSync] = useState(() => loadLastSync());
   const [syncOn, setSyncOn] = useState(() => isConfigured());
   const [syncBusy, setSyncBusy] = useState(false);
+  // True only for a user-initiated sync: a background one must not flicker the
+  // chip to "Syncing…" on every tab switch.
+  const [syncVisibleBusy, setSyncVisibleBusy] = useState(false);
+  // Last sync failure, kept so the chip and the More screen can say WHY
+  // instead of just "failed".
+  const [syncError, setSyncError] = useState(null);
   const [ready, setReady] = useState(false);
   const initStarted = useRef(false);
+  const syncBusyRef = useRef(false);
+  const lastAutoSyncAttempt = useRef(0);
 
   const refreshEvents = useCallback(async () => {
     const list = await DataService.fetchAll();
@@ -148,27 +161,44 @@ export function useAppData() {
     toast(next === 'zh' ? '已切换为中文' : 'Switched to English');
   }, []);
 
-  const runCloudSync = useCallback(async () => {
+  /**
+   * Pull-then-push against Supabase.
+   *
+   * `silent` is what makes auto-sync usable: a background sync on tab switch
+   * must not toast when nothing changed, but must still surface a failure
+   * reason and anything that actually arrived.
+   */
+  const runCloudSync = useCallback(async (options) => {
+    const silent = options?.silent === true;
     if (!isConfigured()) {
+      if (silent) return;
       openSyncSettings({
-        onSaved: () => setSyncOn(true),
+        onSaved: () => { setSyncOn(true); setSyncError(null); },
         onDisconnected: () => {
           setSyncOn(false);
           setLastCloudSync(null);
+          setSyncError(null);
           clearLastSync();
         },
       });
       return;
     }
-    if (syncBusy) return;
+    if (syncBusyRef.current) return;
+    syncBusyRef.current = true;
+    lastAutoSyncAttempt.current = Date.now();
     setSyncBusy(true);
+    if (!silent) setSyncVisibleBusy(true);
     try {
       const local = await DataService.exportAll();
       const res = await syncNow(local, loadConfig());
       if (!res.ok) {
-        toast(t(res.code));
+        setSyncError({ code: res.code || 'syncErrUnknown', detail: res.detail || '' });
+        toast(silent
+          ? t('syncAutoFailed', { s: t(res.code || 'syncErrUnknown') })
+          : t(res.code || 'syncErrUnknown'));
         return;
       }
+      setSyncError(null);
       if (res.pulled > 0) {
         await DataService.importAll(res.merged);
         await refreshEvents();
@@ -176,13 +206,46 @@ export function useAppData() {
       setLastCloudSync(res.syncedAt);
       saveLastSync(res.syncedAt);
       setLastSyncAt(Date.parse(res.syncedAt) || Date.now());
-      toast(res.pushed || res.pulled
-        ? t('syncDone', { u: res.pushed, d: res.pulled })
-        : t('syncNoChanges'));
+      if (silent) {
+        if (res.pulled > 0) toast(t('syncPulled', { n: res.pulled }));
+      } else {
+        toast(res.pushed || res.pulled
+          ? t('syncDone', { u: res.pushed, d: res.pulled })
+          : t('syncNoChanges'));
+      }
     } finally {
+      syncBusyRef.current = false;
       setSyncBusy(false);
+      setSyncVisibleBusy(false);
     }
-  }, [syncBusy, refreshEvents]);
+  }, [refreshEvents]);
+
+  /**
+   * Background sync: opening the app or a data tab pulls whatever the iPhone
+   * Shortcut posted while the board was closed. Throttled so tab-hopping is
+   * not a request storm.
+   */
+  const autoSync = useCallback((force) => {
+    if (!isConfigured() || syncBusyRef.current) return;
+    if (!force && Date.now() - lastAutoSyncAttempt.current < AUTO_SYNC_MIN_GAP_MS) return;
+    runCloudSync({ silent: true });
+  }, [runCloudSync]);
+
+  // Boot + coming back to the tab/window.
+  useEffect(() => {
+    if (!ready) return undefined;
+    autoSync(true);
+    const onVisible = () => {
+      if (document.visibilityState === 'visible') autoSync();
+    };
+    const onFocus = () => autoSync();
+    document.addEventListener('visibilitychange', onVisible);
+    window.addEventListener('focus', onFocus);
+    return () => {
+      document.removeEventListener('visibilitychange', onVisible);
+      window.removeEventListener('focus', onFocus);
+    };
+  }, [ready, autoSync]);
 
   return {
     events,
@@ -192,7 +255,10 @@ export function useAppData() {
     lastSyncAt,
     lastCloudSync,
     syncOn,
-    syncBusy,
+    syncBusy: syncVisibleBusy,
+    syncError,
+    setSyncError,
+    autoSync,
     setSyncOn,
     setLastCloudSync,
     runCloudSync,

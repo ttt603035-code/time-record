@@ -176,8 +176,20 @@ sync that is plainly off.
 
 ### 3. Sync
 
-Tap **Sync now** on each device. Sync is manual on purpose: nothing leaves the
-device until you ask it to.
+Once configured, the board pulls automatically: on launch, when the tab/window
+regains focus, and when you open **Today / Calendar / Insights** (throttled to
+one request per 15 s). That is what makes the iPhone Shortcut flow work — a
+record posted seconds ago is on screen when you open the site. **Sync now** in
+More still forces an immediate round-trip, and a failure shows the reason (no
+table / key rejected / blocked by RLS / network), not just "failed".
+
+### Shortcut → Supabase (写入端)
+
+Recording still happens in the iPhone Shortcut `time record 1`; the site is a
+read-only board. To have the Shortcut POST each finished record to the same
+`events` table, follow **[docs/shortcuts-supabase.md](docs/shortcuts-supabase.md)**
+— exact URL, headers, JSON body, how to generate `id`, and how the fields map
+to the calendar event title.
 
 ### How conflicts are resolved
 
