@@ -2047,13 +2047,18 @@ button.chip.sync-refresh[disabled] { opacity: 0.55; }
 button.chip.sync-refresh svg { width: 14px; height: 14px; }
 button.chip.sync-refresh.is-spinning svg { animation: sync-spin 1s linear infinite; }
 
-/* Search chip — icon-only, same grey chrome as the other topbar chips. */
+/* Search chip — icon-only, same grey chrome as the other topbar chips.
+   Exact same 30px height as Sync/Refresh so all three sit on one even line. */
 button.chip.search-chip {
   width: auto;
-  height: auto;
+  height: 30px;
+  min-height: 30px;
   min-width: 0;
   flex: 0 0 auto;
-  padding: 6px 9px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 9px;
   color: var(--text-2);
   border-color: var(--border);
   cursor: pointer;

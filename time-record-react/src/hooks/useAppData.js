@@ -138,6 +138,11 @@ export function useAppData() {
     return refreshEvents();
   }, [refreshEvents]);
 
+  const removeMany = useCallback(async (ids) => {
+    await DataService.removeMany(ids);
+    return refreshEvents();
+  }, [refreshEvents]);
+
   const saveCategories = useCallback(async (list) => {
     await DataService.saveCategories(list);
     return refreshCategories();
@@ -267,6 +272,7 @@ export function useAppData() {
     createEvent,
     updateEvent,
     removeEvent,
+    removeMany,
     saveCategories,
     clearAll,
     applyLanguage,

@@ -59,10 +59,13 @@ UI (render functions)
 
 - Storage key: **`calendar_events_v1`** (stable) for events
 - Storage key: **`calendar_categories_v1`** for event templates/categories
+- Storage key: **`calendar_trash_v1`** for the Trash (deleted events, restorable)
+- Storage key: **`calendar_tpl_trash_v1`** for deleted-template tombstones
 - Event value: `{ "version": 1, "events": [ … ] }`
 - **The UI never calls `localStorage` directly.** All persistence goes through
   `StorageService` (`getEvents`, `saveEvents`, `addEvent`, `updateEvent`,
-  `deleteEvent`, `importEvents`, `exportEvents`, `clearAll`, plus
+  `deleteEvent`, `importEvents`, `exportEvents`, `clearAll`, the Trash
+  accessors `getTrash` / `restoreEvent` / `emptyTrash`, plus
   `getCategories` / `saveCategories`).
 - `DataService.importAll(data)` already accepts an array **or** an
   `{events:[…]}` envelope — the entry point for a future Apple Shortcuts

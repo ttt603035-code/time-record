@@ -272,6 +272,24 @@ the markup. Verified across single-segment, dominant-plus-sliver, five-slivers,
 all-equal and ten-segment datasets: gaps stay within 2.92–3.12px and the ring
 holds a uniform 24.40px throughout.
 
+### New: delete sample data without hunting events
+
+A freshly synced device seeds demo data (or carries over history), and getting
+rid of it meant deleting events one by one.
+
+**More → Manage by category** (`src/pages/More.jsx`). A card on the More
+screen lists every event grouped by its category (template order, unknown
+categories alphabetical, uncategorized last), each row with a delete button,
+and each group with a *delete all* action — so a whole category of sample
+data goes in one tap. Both ask for a confirmation dialog like every other
+destructive action in the app.
+
+Deletion semantics note: the React build deletes directly (no Trash), while
+the legacy build moves deletions into its 2-day Trash and erases the cloud
+copy at sync. The manage card uses the same `DataService.remove` / new
+`DataService.removeMany` the rest of the React app uses, so it behaves like
+the existing delete everywhere.
+
 ---
 
 ## Phase 2 (not started)
