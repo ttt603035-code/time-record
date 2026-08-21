@@ -26,8 +26,11 @@ const STORAGE_KEY = 'calendar_events_v1';
 const CATEGORY_KEY = 'calendar_categories_v1';
 const SETTINGS_KEY = 'calendar_settings_v1';
 const TRASH_KEY = 'calendar_trash_v1';
+const TPL_TRASH_KEY = 'calendar_tpl_trash_v1';
 /** Days a deleted event stays in the Trash before it is purged automatically. */
 const TRASH_RETENTION_DAYS = 2;
+/** Deleted-template tombstones are tiny; keep them longer to be safe. */
+const TPL_TRASH_RETENTION_DAYS = 30;
 
 const MONTHS_SHORT = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 const MONTHS_LONG = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
@@ -461,11 +464,16 @@ function normalizeImport(data) {
 }
 
 /** Category ("event template") model. */
+const CATEGORY_EPOCH = '1970-01-01T00:00:00.000Z';
+
 function normalizeCategory(c) {
   return {
     id: (typeof c.id === 'string' && c.id) ? c.id : 'cat_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6),
     name: (typeof c.name === 'string' && c.name.trim()) ? c.name.trim() : 'Untitled',
     color: normalizeColorValue(c.color),
+    // For last-write-wins template sync. Untouched/legacy templates get the
+    // epoch so they never beat a genuinely edited copy from another device.
+    updatedAt: (typeof c.updatedAt === 'string' && !Number.isNaN(Date.parse(c.updatedAt))) ? c.updatedAt : CATEGORY_EPOCH,
   };
 }
 
@@ -700,6 +708,64 @@ const StorageService = (() => {
     return trash.length - keep.length;
   }
 
+  // ── Template tombstones (deleted templates must not sync back) ──
+  let memoryTplTrash = null;
+
+  async function getTplTombstones() {
+    if (memoryTplTrash) return memoryTplTrash.slice();
+    if (!ls) { memoryTplTrash = []; return []; }
+    let raw = null;
+    try { raw = ls.getItem(TPL_TRASH_KEY); } catch (err) { raw = null; }
+    let arr = [];
+    if (raw) { try { arr = JSON.parse(raw); } catch (err) { arr = []; } }
+    memoryTplTrash = Array.isArray(arr)
+      ? arr
+          .filter((x) => x && typeof x === 'object' && x.id)
+          .map((x) => ({
+            id: String(x.id),
+            deletedAt: (typeof x.deletedAt === 'string' && !Number.isNaN(Date.parse(x.deletedAt)))
+              ? x.deletedAt : new Date().toISOString(),
+            cloudDeleted: !!x.cloudDeleted,
+          }))
+      : [];
+    return memoryTplTrash.slice();
+  }
+
+  async function saveTplTombstones(list) {
+    memoryTplTrash = list.slice();
+    if (!ls) return false;
+    try { ls.setItem(TPL_TRASH_KEY, JSON.stringify(memoryTplTrash)); return true; } catch (err) { return false; }
+  }
+
+  async function addTplTombstone(id) {
+    const list = await getTplTombstones();
+    const rest = list.filter((x) => x.id !== id);
+    rest.push({ id: id, deletedAt: new Date().toISOString(), cloudDeleted: false });
+    await saveTplTombstones(rest);
+    return true;
+  }
+
+  async function markTplTombstonesSynced(ids) {
+    const set = new Set(ids);
+    const list = await getTplTombstones();
+    await saveTplTombstones(list.map((x) => (set.has(x.id) ? Object.assign({}, x, { cloudDeleted: true }) : x)));
+    return true;
+  }
+
+  async function purgeExpiredTplTombstones(requireCloudDeleted) {
+    const list = await getTplTombstones();
+    const cutoff = Date.now() - TPL_TRASH_RETENTION_DAYS * 24 * 60 * 60 * 1000;
+    const keep = list.filter((x) => {
+      const at = Date.parse(x.deletedAt);
+      const expired = !Number.isNaN(at) && at < cutoff;
+      if (!expired) return true;
+      if (requireCloudDeleted && !x.cloudDeleted) return true;
+      return false;
+    });
+    if (keep.length !== list.length) await saveTplTombstones(keep);
+    return list.length - keep.length;
+  }
+
   // ── Categories (event templates) ──
   let memoryCategories = null;
   let categoriesFresh = false;
@@ -779,6 +845,10 @@ const StorageService = (() => {
     emptyTrash,
     markTrashCloudDeleted,
     purgeExpiredTrash,
+    getTplTombstones,
+    addTplTombstone,
+    markTplTombstonesSynced,
+    purgeExpiredTplTombstones,
     getCategories,
     saveCategories,
     backupKeys,
@@ -813,6 +883,10 @@ const DataService = {
   emptyTrash: () => StorageService.emptyTrash(),
   markTrashSynced: (ids) => StorageService.markTrashCloudDeleted(ids),
   purgeExpiredTrash: (requireCloudDeleted) => StorageService.purgeExpiredTrash(requireCloudDeleted),
+  fetchTplTombstones: () => StorageService.getTplTombstones(),
+  addTplTombstone: (id) => StorageService.addTplTombstone(id),
+  markTplTombstonesSynced: (ids) => StorageService.markTplTombstonesSynced(ids),
+  purgeExpiredTplTombstones: (requireCloudDeleted) => StorageService.purgeExpiredTplTombstones(requireCloudDeleted),
   fetchCategories: () => StorageService.getCategories(),
   saveCategories: (list) => StorageService.saveCategories(list),
   getSetting: (key) => StorageService.getSetting(key),
@@ -932,6 +1006,72 @@ const SyncService = (() => {
     return Number.isNaN(ms) ? 0 : ms;
   }
 
+  /* Templates sync through the SAME events table as marker rows — no extra
+     SQL setup needed. A marker is recognised by its id prefix and never
+     shown as a calendar event. */
+  const TPL_ROW_PREFIX = 'tplrow_';
+
+  function isTemplateRow(row) {
+    return typeof row?.id === 'string' && row.id.indexOf(TPL_ROW_PREFIX) === 0;
+  }
+
+  function categoryToRow(cat, userKey) {
+    return {
+      id: TPL_ROW_PREFIX + cat.id,
+      user_key: userKey,
+      date: '1970-01-01',
+      start_time: '00:00',
+      end_time: '00:00',
+      title: cat.name,
+      category: '__template__',
+      color: cat.color,
+      note: '',
+      created_at: cat.updatedAt,
+      updated_at: cat.updatedAt,
+    };
+  }
+
+  function rowToCategory(row) {
+    return {
+      id: String(row.id).slice(TPL_ROW_PREFIX.length),
+      name: row.title,
+      color: row.color,
+      updatedAt: row.updated_at || row.created_at,
+    };
+  }
+
+  /** Last-write-wins merge for templates (same rule as events). */
+  function mergeCategories(localList, remoteList) {
+    const local = new Map(localList.map((c) => [c.id, c]));
+    const remote = new Map(remoteList.map((c) => [c.id, c]));
+    const merged = [];
+    const toPush = [];
+    let pulled = 0;
+
+    local.forEach((mine, id) => {
+      const theirs = remote.get(id);
+      if (!theirs) { merged.push(mine); toPush.push(mine); return; }
+      const a = stamp(mine.updatedAt);
+      const b = stamp(theirs.updatedAt);
+      if (b > a) { merged.push(theirs); pulled++; }
+      else if (a > b) { merged.push(mine); toPush.push(mine); }
+      else merged.push(mine);
+    });
+
+    remote.forEach((theirs, id) => {
+      if (!local.has(id)) { merged.push(theirs); pulled++; }
+    });
+
+    // Same name from two devices (different ids): keep the newer one.
+    const byName = new Map();
+    merged.forEach((cat) => {
+      const key = cat.name.toLowerCase();
+      const seen = byName.get(key);
+      if (!seen || stamp(cat.updatedAt) > stamp(seen.updatedAt)) byName.set(key, cat);
+    });
+    return { merged: [...byName.values()], toPush, pulled };
+  }
+
   /**
    * Last-write-wins merge.
    *
@@ -1013,7 +1153,8 @@ const SyncService = (() => {
     }
   }
 
-  async function syncNow(localEvents, rawConfig, tombstoneIds) {
+  async function syncNow(localEvents, rawConfig, opts) {
+    opts = opts || {};
     const { ok, errors, config } = validateConfig(rawConfig || loadConfig() || {});
     if (!ok) return { ok: false, code: Object.values(errors)[0] };
     try {
@@ -1024,11 +1165,19 @@ const SyncService = (() => {
         .eq('user_key', config.userKey);
       if (error) throw error;
 
-      const trashIds = new Set(tombstoneIds || []);
-      const remoteAll = (data || []).map(fromRow);
+      const trashIds = new Set(opts.trashIds || []);
+      const tplTrashIds = new Set(opts.tplTrashIds || []);
+      const localCats = opts.categories || [];
 
-      // Propagate local deletions: erase the cloud copies of trashed events.
-      const deadRemote = remoteAll.filter((e) => trashIds.has(e.id)).map((e) => e.id);
+      const allRows = data || [];
+      const remoteAll = allRows.filter((r) => !isTemplateRow(r)).map(fromRow);
+      const remoteCatsAll = allRows.filter(isTemplateRow).map(rowToCategory);
+
+      // Propagate local deletions: erase the cloud copies of trashed events
+      // and deleted templates in one round trip.
+      const deadEventIds = remoteAll.filter((e) => trashIds.has(e.id)).map((e) => e.id);
+      const deadTplIds = remoteCatsAll.filter((c) => tplTrashIds.has(c.id)).map((c) => TPL_ROW_PREFIX + c.id);
+      const deadRemote = deadEventIds.concat(deadTplIds);
       if (deadRemote.length) {
         const { error: delErr } = await supabase
           .from(SYNC_TABLE)
@@ -1038,12 +1187,16 @@ const SyncService = (() => {
         if (delErr) throw delErr;
       }
 
-      // And never pull a trashed event back down.
+      // And never pull a trashed event / deleted template back down.
       const remote = remoteAll.filter((e) => !trashIds.has(e.id));
-      const { merged, toPush, toPull } = mergeEvents(localEvents, remote);
+      const remoteCats = remoteCatsAll.filter((c) => !tplTrashIds.has(c.id));
 
-      if (toPush.length) {
-        const rows = toPush.map((ev) => toRow(ev, config.userKey));
+      const { merged, toPush, toPull } = mergeEvents(localEvents, remote);
+      const catRes = mergeCategories(localCats, remoteCats);
+
+      const rows = toPush.map((ev) => toRow(ev, config.userKey))
+        .concat(catRes.toPush.map((cat) => categoryToRow(cat, config.userKey)));
+      if (rows.length) {
         const { error: upErr } = await supabase
           .from(SYNC_TABLE)
           .upsert(rows, { onConflict: 'id' });
@@ -1056,6 +1209,9 @@ const SyncService = (() => {
         pushed: toPush.length,
         pulled: toPull.length,
         deleted: deadRemote.length,
+        mergedCategories: catRes.merged,
+        pushedCats: catRes.toPush.length,
+        pulledCats: catRes.pulled,
         syncedAt: new Date().toISOString(),
       };
     } catch (err) {
@@ -1108,7 +1264,7 @@ const SyncService = (() => {
 
   return {
     loadConfig, saveConfig, clearConfig, isConfigured, validateConfig,
-    toRow, fromRow, mergeEvents, classifyError,
+    toRow, fromRow, mergeEvents, mergeCategories, classifyError,
     testConnection, syncNow, deleteRemote, resetClient,
     loadLastSync, saveLastSync, clearLastSync,
   };
@@ -1205,6 +1361,12 @@ function applyTheme(id) {
   if (theme === DEFAULT_THEME) root.removeAttribute('data-theme');
   else root.setAttribute('data-theme', theme);
   return theme;
+}
+
+/** Current theme's accent as a hex colour (for SVG charts). */
+function themeAccent() {
+  const th = THEMES.find((x) => x.id === appTheme);
+  return th ? th.accent : '#1D1D1F';
 }
 
 
@@ -2239,15 +2401,29 @@ async function runSync() {
     const local = await DataService.exportAll();
     const trash = await DataService.fetchTrash();
     const trashIds = trash.map((x) => x.id);
-    const res = await SyncService.syncNow(local, SyncService.loadConfig(), trashIds);
+    const localCats = await DataService.fetchCategories();
+    const tplTrash = await DataService.fetchTplTombstones();
+    const tplTrashIds = tplTrash.map((x) => x.id);
+    const res = await SyncService.syncNow(local, SyncService.loadConfig(), {
+      trashIds: trashIds,
+      categories: localCats,
+      tplTrashIds: tplTrashIds,
+    });
     if (!res.ok) { toast(t(res.code)); return; }
     if (res.pulled > 0) {
       await DataService.importAll(res.merged);
       await refreshEvents();
     }
+    // Templates travel with the same sync: save the merged list so edits
+    // (name/colour) made on another device land here too.
+    if (res.mergedCategories) {
+      await DataService.saveCategories(res.mergedCategories);
+      await refreshCategories();
+    }
     // The cloud copies of everything in the Trash are gone now, so these
     // tombstones may expire safely.
     if (trashIds.length) await DataService.markTrashSynced(trashIds);
+    if (tplTrashIds.length) await DataService.markTplTombstonesSynced(tplTrashIds);
     syncedAt = res.syncedAt;
     SyncService.saveLastSync(res.syncedAt);
     lastSyncAt = Date.parse(res.syncedAt) || Date.now();
@@ -2919,13 +3095,17 @@ function showTemplateForm(cat) {
   saveBtn.addEventListener('click', async () => {
     const name = nameInput.value.trim();
     if (!name) { nameInput.classList.add('is-invalid'); nameInput.focus(); return; }
-    const catObj = normalizeCategory({ id: draft.id, name, color: draft.color });
+    // Stamp the edit time so template sync (last-write-wins) carries this
+    // change to the cloud and to other devices.
+    const catObj = normalizeCategory({ id: draft.id, name, color: draft.color, updatedAt: new Date().toISOString() });
     if (isEdit) {
       const i = state.categories.findIndex((c) => c.id === cat.id);
       if (i >= 0) state.categories[i] = catObj;
     } else {
       const i = state.categories.findIndex((c) => c.name.toLowerCase() === name.toLowerCase());
-      if (i >= 0) state.categories[i] = catObj;
+      // Same name already exists: keep its id so the cloud copy is UPDATED
+      // instead of a duplicate marker row being created.
+      if (i >= 0) state.categories[i] = Object.assign({}, catObj, { id: state.categories[i].id });
       else state.categories.push(catObj);
     }
     await DataService.saveCategories(state.categories);
@@ -2960,6 +3140,9 @@ function confirmDeleteTemplate(cat) {
         onClick: async () => {
           state.categories = state.categories.filter((c) => c.id !== cat.id);
           await DataService.saveCategories(state.categories);
+          // Tombstone: the next sync erases the cloud marker instead of
+          // pulling the deleted template straight back.
+          await DataService.addTplTombstone(cat.id);
           const listEl = document.querySelector('.tpl-list');
           if (listEl && listEl._renderList) listEl._renderList();
           refreshAll();
@@ -4280,9 +4463,12 @@ function renderOverview(view) {
 
   // Trend for Week / Month / Year
   if (insights.mode !== 'day') {
+    // Unfiltered = every task's minutes summed per day/month, so it belongs
+    // to the app as a whole → paint it in the current THEME colour. With a
+    // category selected it keeps that category's colour.
     view.appendChild(trendCard(
       sel ? eventsForCategory(evs, sel.key) : evs,
-      sel ? sel.color : EVENT_COLORS.blue,
+      sel ? sel.color : themeAccent(),
       sel ? sel.name : null,
     ));
   }
@@ -4825,6 +5011,7 @@ async function init() {
   // Trash housekeeping: silently drop tombstones past their retention window
   // (kept until a sync has erased their cloud copies, when sync is on).
   await DataService.purgeExpiredTrash(SyncService.isConfigured());
+  await DataService.purgeExpiredTplTombstones(SyncService.isConfigured());
 
   await refreshEvents();
   await refreshCategories();
