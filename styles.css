@@ -1517,6 +1517,16 @@ textarea.text-input { resize: none; line-height: 1.45; }
   border-radius: 50%;
   flex: 0 0 auto;
 }
+/* Tap-to-read value, pinned to the chart head's right edge. */
+.chart-head-value {
+  margin-left: auto;
+  flex: 0 0 auto;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-2);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
 .chart-head-sub {
   font-weight: 600;
   color: var(--text);
@@ -1972,6 +1982,26 @@ textarea.text-input { resize: none; line-height: 1.45; }
 .theme-name { font-size: 11px; font-weight: 500; color: var(--text-3); }
 .topbar-end { display: flex; align-items: center; gap: 8px; flex: 0 0 auto; }
 .sync-actions { display: flex; align-items: center; gap: 6px; }
+/* All topbar action chips (Search / Sync / Refresh) share one exact height
+   and sit on the same line — no per-chip margins or odd paddings. */
+.sync-actions .chip,
+.sync-actions button.chip {
+  margin: 0;
+  height: 30px;
+  min-height: 30px;
+  padding: 0 10px;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1;
+  color: var(--text-2);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-pill);
+  white-space: nowrap;
+}
 .sync-chip { font-variant-numeric: tabular-nums; }
 button.chip.sync-chip,
 button.chip.sync-refresh {
@@ -2007,6 +2037,60 @@ button.chip.sync-chip[disabled],
 button.chip.sync-refresh[disabled] { opacity: 0.55; }
 button.chip.sync-refresh svg { width: 14px; height: 14px; }
 button.chip.sync-refresh.is-spinning svg { animation: sync-spin 1s linear infinite; }
+
+/* Search chip — icon-only, same grey chrome as the other topbar chips. */
+button.chip.search-chip {
+  width: auto;
+  height: auto;
+  min-width: 0;
+  flex: 0 0 auto;
+  padding: 6px 9px;
+  color: var(--text-2);
+  border-color: var(--border);
+  cursor: pointer;
+}
+button.chip.search-chip svg { width: 14px; height: 14px; }
+button.chip.search-chip:active { opacity: 0.55; }
+
+/* ───────────────────────── Search modal ───────────────────────── */
+
+.search-input { width: 100%; }
+.search-meta {
+  font-size: 12px;
+  color: var(--text-3);
+  margin: 10px 2px 6px;
+}
+.search-results { display: flex; flex-direction: column; }
+.sr-main {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+.sr-title {
+  font-size: 15px;
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.sr-meta {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-3);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* ───────────────────────── Trash ───────────────────────── */
+
+.trash-row { cursor: default; }
+.trash-restore-btn:hover {
+  background: var(--surface-2);
+  color: var(--text);
+}
+
 
 .settings-title-row {
   display: flex;

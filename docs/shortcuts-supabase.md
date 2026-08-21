@@ -1,5 +1,7 @@
 # 快捷指令 → Supabase → 看板
 
+> **颜色说明（新版）**：现在颜色由网站里的「日程模板」统一管理 —— 只要 `category` 和模板同名，同步时会自动套用模板颜色并覆盖这里传的 `color`。所以 **`color` 字段可以不传或随便填 `blue`**，下文的颜色映射仅作参考。逐步教程见 [shortcuts-step-by-step.md](shortcuts-step-by-step.md)（无颜色版）。
+
 > 想要一步一步照着点的版本，看 **[shortcuts-step-by-step.md](shortcuts-step-by-step.md)**（含建库、每个动作填什么、验收和排错）。本文是字段与协议的参考手册。
 
 这份文档说明：iPhone 快捷指令 `time record 1` 的 **结束** 和 **补录** 两个分支，完成后如何把这条记录写进你自己的 Supabase `events` 表，让本站（今天 / 日历 / 洞悉）打开就能看到。
@@ -90,7 +92,7 @@ https://<你的项目>.supabase.co/rest/v1/events
 | `end_time` | `HH:MM` | 「结束时间」→ 格式化日期 |
 | `title` | **二级分类**（日程内容），**不带**「N 分钟」 | 变量「二级分类」/「日程内容」 |
 | `category` | **一级分类**：`English` / `Chinese` / `Politics` / `Health` / `Study` / `Daily` / `relax` / `Todolist` | 变量「一级分类」/「first选择」 |
-| `color` | 颜色名，见下表；不确定就填 `blue` | 按一级分类固定映射 |
+| `color` | **可省略**：网站会按 `category` 套用模板颜色并覆盖此值 | 填 `blue` 即可 |
 | `note` | 备注，可填 `二级分类 已完成` | 和日历备注同一段文本 |
 | `created_at` / `updated_at` | ISO 8601 时间戳 | 「当前日期」→ ISO 8601 格式 |
 
