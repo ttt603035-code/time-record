@@ -1452,12 +1452,12 @@ const EXPORT_AT_KEY = 'calendar_export_at_v1';
 
 const DEFAULT_THEME = 'graphite';
 const THEMES = [
-  { id: 'graphite', labelKey: 'themeGraphite', accent: '#1D1D1F', swatch: '#1D1D1F' },
-  { id: 'blue', labelKey: 'themeBlue', accent: '#5B8DBE', swatch: '#5B8DBE' },
-  { id: 'sage', labelKey: 'themeSage', accent: '#6FA88C', swatch: '#6FA88C' },
-  { id: 'clay', labelKey: 'themeClay', accent: '#C08A6E', swatch: '#C08A6E' },
-  { id: 'lavender', labelKey: 'themeLavender', accent: '#9186C4', swatch: '#9186C4' },
-  { id: 'rose', labelKey: 'themeRose', accent: '#C4808F', swatch: '#C4808F' },
+  { id: 'graphite', labelKey: 'themeGraphite', accent: '#1D1D1F', swatch: '#1D1D1F', chart: '#8E8E93' },
+  { id: 'blue', labelKey: 'themeBlue', accent: '#5B8DBE', swatch: '#5B8DBE', chart: '#5B8DBE' },
+  { id: 'sage', labelKey: 'themeSage', accent: '#6FA88C', swatch: '#6FA88C', chart: '#6FA88C' },
+  { id: 'clay', labelKey: 'themeClay', accent: '#C08A6E', swatch: '#C08A6E', chart: '#C08A6E' },
+  { id: 'lavender', labelKey: 'themeLavender', accent: '#9186C4', swatch: '#9186C4', chart: '#9186C4' },
+  { id: 'rose', labelKey: 'themeRose', accent: '#C4808F', swatch: '#C4808F', chart: '#C4808F' },
 ];
 
 function applyTheme(id) {
@@ -1473,6 +1473,14 @@ function applyTheme(id) {
 function themeAccent() {
   const th = THEMES.find((x) => x.id === appTheme);
   return th ? th.accent : '#1D1D1F';
+}
+
+/** Current theme's colour for data graphics. The graphite accent is nearly
+    black, which reads as a heavy block in the Week/Month/Year trend chart —
+    so charts use a softer neutral there, keeping the other themes' accents. */
+function themeChartColor() {
+  const th = THEMES.find((x) => x.id === appTheme);
+  return (th && th.chart) ? th.chart : themeAccent();
 }
 
 
@@ -4856,7 +4864,7 @@ function renderOverview(view) {
     // category selected it keeps that category's colour.
     view.appendChild(trendCard(
       sel ? eventsForCategory(evs, sel.key) : evs,
-      sel ? sel.color : themeAccent(),
+      sel ? sel.color : themeChartColor(),
       sel ? sel.name : null,
     ));
   }
