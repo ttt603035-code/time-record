@@ -59,11 +59,13 @@ UI (render functions)
 
 - Storage key: **`calendar_events_v1`** (stable) for events
 - Storage key: **`calendar_categories_v1`** for event templates/categories
+- Storage key: **`calendar_deleted_v1`** for deletion tombstones (Cloud Sync)
 - Event value: `{ "version": 1, "events": [ … ] }`
 - **The UI never calls `localStorage` directly.** All persistence goes through
   `StorageService` (`getEvents`, `saveEvents`, `addEvent`, `updateEvent`,
-  `deleteEvent`, `importEvents`, `exportEvents`, `clearAll`, plus
-  `getCategories` / `saveCategories`).
+  `deleteEvent`, `deleteEvents`, `importEvents`, `exportEvents`, `clearAll`,
+  tombstone accessors `getTombstones` / `addTombstones` / `dropTombstones`,
+  plus `getCategories` / `saveCategories`).
 - `DataService.importAll(data)` already accepts an array **or** an
   `{events:[…]}` envelope — the entry point for a future Apple Shortcuts
   pipeline.
@@ -146,6 +148,7 @@ is off until you configure it, and turning it off changes nothing locally. See
 - **Calendar / Today / Insights / More** — floating capsule tabs
 - **Insights** — Day/Week/Month/Year time analytics with donut → Category → Task → Session drill-down, all derived automatically from your events
 - **More → Data** — export JSON, import JSON, clear all data + live storage-key list
+- **More → Manage by category** — every event grouped by category, each row with a delete button (plus delete-all per category); ideal for cleaning up sample data after a new-device sync
 - **More → Event Templates** — add / edit / delete your categories (they feed the event form)
 - **More → Language** — English / 中文 interface switch (persisted)
 - **More → Cloud Sync** — optional Supabase mirror (set up, test, sync now, disconnect)
@@ -158,7 +161,9 @@ Off by default. Everything keeps working locally whether you turn it on or not.
 
 In your Supabase project, open **SQL Editor** and run the script shown under
 **More → Cloud Sync → Set up → Create the table** (there is a Copy button).
-It creates `public.events`, an index on `user_key`, and an RLS policy.
+It creates `public.events` (including the `deleted_at` tombstone column), an
+index on `user_key`, and an RLS policy. Re-running it later is safe — that is
+how an existing table gains the `deleted_at` column.
 
 ### 2. Connect the app
 
@@ -187,11 +192,24 @@ Last-write-wins on each event's `updatedAt`:
 - the same event edited on both → the more recent edit wins
 - identical timestamps → the local copy is kept and nothing is written
 
-**Deletions are not synced.** Without tombstones, "this row is missing" and
-"this row was deleted" look identical, and guessing wrong destroys data
-silently. So deleting an event on one device does not delete it elsewhere, and
-the next sync will copy it back from whichever device still has it. Clearing
-data stays a local, explicit action.
+**Deletions are synced as tombstones.** Deleting an event stamps the id with a
+deletion time — stored locally under `calendar_deleted_v1` and, after the next
+sync, in the row's `deleted_at` column in the cloud. The newest write for an id
+always wins (edit or delete), so:
+
+- deleting an event on one device removes it on **every** device after they
+  sync — including sample data you no longer want
+- re-saving an id after deletion (e.g. re-importing via a Shortcut, which uses
+  a stable id) revives the event and clears the tombstone
+- a row that is merely *missing* upstream is still "not seen yet", never
+  "deleted" — guessing that destroys data silently, so it is never assumed
+
+**Clear all** stays a local, explicit action: it writes no tombstones and never
+wipes the cloud or your other devices.
+
+Existing tables need the `deleted_at` column: re-run the setup script once
+(it is idempotent — `add column if not exists`). Until then, sync reports
+*“Table is missing the deleted_at column — run the setup SQL again”*.
 
 ### Security — read this before using it
 

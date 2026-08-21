@@ -6,7 +6,9 @@
  * rules, the round-trip mapping and the error handling are all covered
  * without needing a real project or a network.
  */
-import { mergeEvents, toRow, fromRow, validateConfig, maskKey } from './src/lib/sync-core.js';
+import {
+  mergeEvents, toRow, toTombstoneRow, fromRow, validateConfig, maskKey,
+} from './src/lib/sync-core.js';
 
 const results = [];
 function check(name, ok, extra = '') {
@@ -91,11 +93,108 @@ const NEW = '2026-08-18T12:00:00.000Z';
   check('Empty on both sides is a no-op', merged.length === 0);
 }
 
+/* ── Deletion tombstones ──────────────────────────────────────
+   A delete is a write like any other: a timestamped "this id is gone"
+   marker. The newest write for an id wins, in either direction.
+   ─────────────────────────────────────────────────────────── */
+
+{
+  // Local delete newer than the server copy: the event disappears and the
+  // delete travels as a tombstone write.
+  const { merged, toPush, toPull, toPullDeletes } =
+    mergeEvents([], [ev('x', OLD, 'on server')], { x: NEW });
+  check('Local tombstone beats an older server row', merged.length === 0);
+  check('Tombstone is queued as a server write',
+    toPush.length === 1 && toPush[0].tombstone === true
+    && toPush[0].id === 'x' && toPush[0].deletedAt === NEW,
+    JSON.stringify(toPush));
+  check('No pulls, no local deletes', toPull.length === 0 && toPullDeletes.length === 0);
+}
+
+{
+  // The classic regression this exists to fix: a delete on one device must
+  // not come back from the cloud on the next sync.
+  const { merged, toPush, toPull } = mergeEvents([], [ev('x', OLD, 'on server')], { x: NEW });
+  check('Deleted event is NOT pulled back from the cloud',
+    merged.length === 0 && toPull.length === 0,
+    `merged=${merged.length} toPull=${toPull.length}`);
+}
+
+{
+  // A remote tombstone newer than the local event removes it locally and the
+  // server's deletion timestamp is adopted.
+  const remote = [ev('y', OLD, 'theirs')];
+  remote[0].deletedAt = NEW;
+  const { merged, toPullDeletes, tombAdopt, toPush } =
+    mergeEvents([ev('y', OLD, 'mine')], remote, {});
+  check('Newer remote tombstone deletes the local event', merged.length === 0);
+  check('Local event is queued for deletion', toPullDeletes.length === 1 && toPullDeletes[0] === 'y');
+  check('Remote tombstone is adopted locally', tombAdopt.y === NEW);
+  check('Adopted tombstone is not re-pushed', toPush.length === 0);
+}
+
+{
+  // A local tombstone older than a remote tombstone loses: adopt the newer.
+  const remote = [ev('z', OLD)];
+  remote[0].deletedAt = NEW;
+  const { merged, tombAdopt, toPush } = mergeEvents([], remote, { z: OLD });
+  check('Newer remote tombstone wins over an older local one',
+    merged.length === 0 && tombAdopt.z === NEW && toPush.length === 0);
+}
+
+{
+  // Identical tombstones on both sides write nothing.
+  const row = toRow(ev('t', OLD), 'u1');
+  row.deleted_at = OLD;
+  row.updated_at = OLD;
+  const { toPush, toPull } = mergeEvents([], [fromRow(row)], { t: OLD });
+  check('Matching tombstone writes nothing', toPush.length === 0 && toPull.length === 0);
+}
+
+{
+  // Re-saving the same id after a remote delete revives it (Shortcut
+  // re-imports use a stable id on purpose), and the live push clears the
+  // server tombstone.
+  const remote = [ev('w', OLD, 'theirs')];
+  remote[0].deletedAt = OLD;
+  const { merged, toPush } = mergeEvents([ev('w', NEW, 'revived')], remote, {});
+  check('Newer local event revives a deleted id',
+    merged.length === 1 && merged[0].title === 'revived');
+  check('Revival pushes a live row',
+    toPush.length === 1 && toPush[0].tombstone !== true && toPush[0].id === 'w');
+}
+
+{
+  // A local tombstone is dropped when the same id is re-saved locally with a
+  // newer timestamp — otherwise it would delete the event on the next sync.
+  const { merged, toPush, tombDrop } = mergeEvents([ev('v', NEW, 'back')], [], { v: OLD });
+  check('Re-saved event outranks its local tombstone',
+    merged.length === 1 && merged[0].title === 'back');
+  check('Lost tombstone is dropped', tombDrop.length === 1 && tombDrop[0] === 'v');
+  check('Revived event is pushed as a live row',
+    toPush.length === 1 && toPush[0].tombstone !== true);
+}
+
+{
+  // A live event edited upstream after our local delete wins over it.
+  const { merged, toPull } = mergeEvents([], [ev('u', NEW, 'edited upstream')], { u: OLD });
+  check('Upstream edit after our delete wins',
+    merged.length === 1 && merged[0].title === 'edited upstream' && toPull.length === 1);
+}
+
+{
+  // Tombstones never affect ids nobody has deleted.
+  const { merged, toPush, toPull } = mergeEvents([ev('a', OLD)], [], { b: NEW });
+  check('Unrelated tombstone leaves live events alone',
+    merged.length === 1 && merged[0].id === 'a' && toPush.length === 2);
+}
+
 /* ── Row mapping round-trip ─────────────────────────────────── */
 
 {
   const original = ev('r1', NEW, 'Round trip');
   const back = fromRow(toRow(original, 'user-1'));
+  delete back.deletedAt; // fromRow exposes the (null) tombstone column too
   const same = JSON.stringify(back) === JSON.stringify(original);
   check('Event survives a row round-trip unchanged', same,
     same ? '' : JSON.stringify(back));
@@ -107,6 +206,15 @@ const NEW = '2026-08-18T12:00:00.000Z';
   check('Row uses snake_case columns',
     'start_time' in row && 'end_time' in row && 'updated_at' in row
     && !('startTime' in row));
+  check('Live rows clear the tombstone column', row.deleted_at === null);
+}
+
+{
+  const trow = toTombstoneRow('tomb-1', 'me', NEW);
+  check('Tombstone row keeps only id + timestamps',
+    trow.id === 'tomb-1' && trow.user_key === 'me'
+    && trow.deleted_at === NEW && trow.updated_at === NEW
+    && trow.title === '' && trow.date === '');
 }
 
 {
@@ -143,6 +251,8 @@ check('Network failure is classified',
   classifyError(new Error('Failed to fetch')).code === 'syncErrNetwork');
 check('Missing table is classified',
   classifyError({ code: '42P01', message: 'relation "events" does not exist' }).code === 'syncErrNoTable');
+check('Missing deleted_at column is classified',
+  classifyError({ code: '42703', message: 'column "deleted_at" does not exist' }).code === 'syncErrNoColumn');
 check('RLS block is classified',
   classifyError({ code: '42501', message: 'new row violates row-level security policy' }).code === 'syncErrRls');
 check('Bad key is classified',
@@ -188,18 +298,26 @@ function fakeSupabase(remoteRows, { failOn } = {}) {
  * builds its client through a dynamic import that cannot be intercepted here,
  * so this mirrors the same sequence to prove the wiring is right.
  */
-async function syncWith(client, localEvents, userKey) {
+async function syncWith(client, localEvents, userKey, localTombstones = null) {
   const { data, error } = await client.from('events').select('*').eq('user_key', userKey);
   if (error) return { ok: false, ...classifyError(error) };
   const remote = (data || []).map(fromRow);
-  const { merged, toPush, toPull } = mergeEvents(localEvents, remote);
+  const { merged, toPush, toPull, toPullDeletes, tombAdopt, tombDrop } =
+    mergeEvents(localEvents, remote, localTombstones);
   if (toPush.length) {
+    const rows = toPush.map((item) =>
+      item.tombstone ? toTombstoneRow(item.id, userKey, item.deletedAt) : toRow(item, userKey));
     const { error: upErr } = await client
       .from('events')
-      .upsert(toPush.map((e) => toRow(e, userKey)), { onConflict: 'id' });
+      .upsert(rows, { onConflict: 'id' });
     if (upErr) return { ok: false, ...classifyError(upErr) };
   }
-  return { ok: true, merged, pushed: toPush.length, pulled: toPull.length };
+  return {
+    ok: true, merged,
+    pushed: toPush.length,
+    pulled: toPull.length + toPullDeletes.length,
+    toPullDeletes, tombAdopt, tombDrop,
+  };
 }
 
 {
@@ -243,6 +361,29 @@ async function syncWith(client, localEvents, userKey) {
   check('Sync does not mutate the caller\'s array', JSON.stringify(local) === snapshot);
 }
 
+{
+  // A local delete travels over the wire as a tombstone row.
+  const { client, state } = fakeSupabase([toRow(ev('d1', OLD, 'on server'), 'u1')]);
+  const res = await syncWith(client, [], 'u1', { d1: NEW });
+  check('Deleted event leaves the merged list', res.ok && res.merged.length === 0);
+  check('Tombstone row is upserted', state.upserted?.length === 1, JSON.stringify(state.upserted));
+  check('Tombstone row stamps deleted_at and updated_at',
+    state.upserted?.[0]?.deleted_at === NEW && state.upserted?.[0]?.updated_at === NEW
+    && state.upserted[0].id === 'd1');
+}
+
+{
+  // A remote tombstone comes back as a local-delete instruction.
+  const row = toRow(ev('d2', OLD, 'on server'), 'u1');
+  row.deleted_at = NEW;
+  row.updated_at = NEW;
+  const { client } = fakeSupabase([row]);
+  const res = await syncWith(client, [ev('d2', OLD, 'mine')], 'u1', {});
+  check('Remote tombstone reports a pulled deletion',
+    res.ok && res.toPullDeletes?.[0] === 'd2' && res.merged.length === 0);
+  check('Remote tombstone is adopted with the server timestamp', res.tombAdopt?.d2 === NEW);
+}
+
 /* ── i18n coverage ──────────────────────────────────────────── */
 
 const { I18N } = await import('./src/lib/i18n.js');
@@ -252,7 +393,7 @@ check('Every sync string is translated', missingZh.length === 0,
   missingZh.length ? missingZh.join(', ') : `${syncKeys.length} keys`);
 
 const errKeys = ['syncErrUrlEmpty', 'syncErrUrlShape', 'syncErrKeyEmpty', 'syncErrUserEmpty',
-  'syncErrNetwork', 'syncErrNoTable', 'syncErrRls', 'syncErrAuth', 'syncErrUnknown'];
+  'syncErrNetwork', 'syncErrNoTable', 'syncErrRls', 'syncErrAuth', 'syncErrNoColumn', 'syncErrUnknown'];
 check('Every error code has a message',
   errKeys.every((k) => I18N.en[k] && I18N.zh[k]));
 

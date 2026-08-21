@@ -10,7 +10,7 @@
    ============================================================ */
 
 import {
-  SYNC_KEY, SYNC_TABLE, fromRow, mergeEvents, normalizeConfig, toRow, validateConfig,
+  SYNC_KEY, SYNC_TABLE, fromRow, mergeEvents, normalizeConfig, toRow, toTombstoneRow, validateConfig,
 } from './sync-core.js';
 
 /* ── Credential storage ──────────────────────────────────────
@@ -134,6 +134,9 @@ export function classifyError(err) {
   if (code === '42P01' || /relation .* does not exist|Could not find the table/i.test(msg)) {
     return { code: 'syncErrNoTable', detail: msg };
   }
+  if (code === '42703' || /column .* does not exist/i.test(msg)) {
+    return { code: 'syncErrNoColumn', detail: msg };
+  }
   if (code === '42501' || /row-level security|permission denied/i.test(msg)) {
     return { code: 'syncErrRls', detail: msg };
   }
@@ -169,11 +172,14 @@ export async function testConnection(rawConfig) {
 /**
  * Two-way sync.
  *
- * Reads the remote rows, merges by last-write-wins, upserts what the server is
- * missing, and hands the merged list back. Writing to local storage is the
- * caller's job — this function stays free of persistence so it can be tested.
+ * Reads the remote rows, merges by last-write-wins (deletions as tombstones),
+ * upserts what the server is missing — live rows and tombstone rows alike —
+ * and hands the merged list back. Writing to local storage is the caller's
+ * job: `toPullDeletes` lists local events a remote tombstone removed, and
+ * `tombAdopt` / `tombDrop` update the local tombstone map. This function
+ * stays free of persistence so it can be tested.
  */
-export async function syncNow(localEvents, rawConfig) {
+export async function syncNow(localEvents, rawConfig, localTombstones = null) {
   const cfg = rawConfig || loadConfig();
   const { ok, errors, config } = validateConfig(cfg || {});
   if (!ok) return { ok: false, code: Object.values(errors)[0], detail: '' };
@@ -188,10 +194,14 @@ export async function syncNow(localEvents, rawConfig) {
     if (error) throw error;
 
     const remote = (data || []).map(fromRow);
-    const { merged, toPush, toPull } = mergeEvents(localEvents, remote);
+    const { merged, toPush, toPull, toPullDeletes, tombAdopt, tombDrop } =
+      mergeEvents(localEvents, remote, localTombstones);
 
     if (toPush.length) {
-      const rows = toPush.map((ev) => toRow(ev, config.userKey));
+      const rows = toPush.map((item) =>
+        item.tombstone
+          ? toTombstoneRow(item.id, config.userKey, item.deletedAt)
+          : toRow(item, config.userKey));
       const { error: upsertError } = await supabase
         .from(SYNC_TABLE)
         .upsert(rows, { onConflict: 'id' });
@@ -202,7 +212,10 @@ export async function syncNow(localEvents, rawConfig) {
       ok: true,
       merged,
       pushed: toPush.length,
-      pulled: toPull.length,
+      pulled: toPull.length + toPullDeletes.length,
+      toPullDeletes,
+      tombAdopt,
+      tombDrop,
       remoteTotal: remote.length,
       syncedAt: new Date().toISOString(),
     };
@@ -236,8 +249,14 @@ create table if not exists public.events (
   color       text default 'blue',
   note        text default '',
   created_at  text,
-  updated_at  text
+  updated_at  text,
+  deleted_at  text
 );
+
+-- Deleting an event keeps its row and stamps deleted_at (a "tombstone"),
+-- so the deletion syncs to your other devices instead of coming back.
+-- Existing tables need this line too — re-running this script is safe.
+alter table public.events add column if not exists deleted_at text;
 
 create index if not exists events_user_key_idx
   on public.events (user_key);

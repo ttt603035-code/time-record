@@ -25,6 +25,9 @@
 const STORAGE_KEY = 'calendar_events_v1';
 const CATEGORY_KEY = 'calendar_categories_v1';
 const SETTINGS_KEY = 'calendar_settings_v1';
+// Deletion tombstones for Cloud Sync: { [eventId]: deletionTimestamp }.
+// Same key as the React build, since both apps share this origin and table.
+const DELETED_KEY = 'calendar_deleted_v1';
 
 const MONTHS_SHORT = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 const MONTHS_LONG = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
@@ -150,6 +153,7 @@ const I18N = {
     syncErrNoTable: 'Table "events" not found — run the setup SQL first',
     syncErrRls: 'Blocked by row-level security — check the table policy',
     syncErrAuth: 'The anon key was rejected',
+    syncErrNoColumn: 'Table is missing the "deleted_at" column — run the setup SQL again',
     syncErrUnknown: 'Sync failed',
     lastExportNever: 'Not exported yet',
     lastExport: 'Last exported %s',
@@ -235,6 +239,7 @@ const I18N = {
     syncErrNoTable: '找不到 events 表 — 请先执行建表 SQL',
     syncErrRls: '被行级安全策略拦截 — 请检查表的 policy',
     syncErrAuth: 'Anon key 被拒绝',
+    syncErrNoColumn: 'events 表缺少 deleted_at 列 — 请重新执行建表 SQL',
     syncErrUnknown: '同步失败',
     lastExportNever: '尚未导出',
     lastExport: '上次导出 %s',
@@ -543,7 +548,33 @@ const StorageService = (() => {
   async function deleteEvent(id) {
     const events = await getEvents();
     await saveEvents(events.filter((x) => x.id !== id));
+    // Record a tombstone so Cloud Sync can propagate the deletion to the
+    // other devices instead of the event coming back on the next sync.
+    setTombstone(id, new Date().toISOString());
     return true;
+  }
+
+  // Sync-driven deletion: removes rows without writing fresh tombstones
+  // (the caller adopts the server's deletion timestamps instead).
+  async function deleteEventsSilent(ids) {
+    const set = new Set(ids);
+    const events = await getEvents();
+    await saveEvents(events.filter((x) => !set.has(x.id)));
+    return true;
+  }
+
+  function setTombstone(id, iso) {
+    if (!ls) return false;
+    let map = {};
+    try { map = JSON.parse(ls.getItem(DELETED_KEY) || '{}') || {}; } catch (err) { map = {}; }
+    map[id] = iso;
+    try { ls.setItem(DELETED_KEY, JSON.stringify(map)); return true; } catch (err) { return false; }
+  }
+
+  function readTombstones() {
+    if (!ls) return {};
+    try { return JSON.parse(ls.getItem(DELETED_KEY) || '{}') || {}; }
+    catch (err) { return {}; }
   }
 
   async function importEvents(data) {
@@ -646,6 +677,9 @@ const StorageService = (() => {
     addEvent,
     updateEvent,
     deleteEvent,
+    deleteEventsSilent,
+    setTombstone,
+    readTombstones,
     importEvents,
     exportEvents,
     clearAll,
@@ -772,6 +806,28 @@ const SyncService = (() => {
       note: ev.note || '',
       created_at: ev.createdAt,
       updated_at: ev.updatedAt,
+      // Live rows always clear the tombstone column, so an upsert over an
+      // older client's tombstone row revives the event everywhere.
+      deleted_at: null,
+    };
+  }
+
+  // Server-side tombstone for a deleted id: no payload, just the deletion
+  // timestamp in both timestamp columns.
+  function toTombstoneRow(id, userKey, deletedAtIso) {
+    return {
+      id: id,
+      user_key: userKey,
+      date: '',
+      start_time: '',
+      end_time: '',
+      title: '',
+      category: '',
+      color: 'blue',
+      note: '',
+      created_at: null,
+      updated_at: deletedAtIso,
+      deleted_at: deletedAtIso,
     };
   }
 
@@ -787,6 +843,7 @@ const SyncService = (() => {
       note: row.note || '',
       createdAt: row.created_at || row.updated_at,
       updatedAt: row.updated_at || row.created_at,
+      deletedAt: row.deleted_at || null,
     };
   }
 
@@ -797,34 +854,99 @@ const SyncService = (() => {
   }
 
   /**
-   * Last-write-wins merge.
+   * Last-write-wins merge with deletion tombstones — must stay row-for-row
+   * identical to time-record-react/src/lib/sync-core.js, because both
+   * front-ends share the same table.
    *
-   * Deletions are deliberately not synced: without tombstones, "row missing
-   * upstream" and "row deleted upstream" are indistinguishable, and guessing
-   * wrong destroys data silently.
+   * A delete is a timestamped "this id is gone" marker (locally under
+   * DELETED_KEY, server-side in the row's deleted_at column). For any id the
+   * newest write wins; a write is either an event (its updatedAt) or a
+   * tombstone (its deletion time). A row that is merely missing upstream is
+   * still "not seen yet", never "deleted". Re-saving an id after deletion
+   * revives the event and drops the stale tombstone. Ties keep the existing
+   * copy. Returns { merged, toPush, toPull, toPullDeletes, tombAdopt,
+   * tombDrop } — toPush holds live events plus { tombstone, id, deletedAt }
+   * markers.
    */
-  function mergeEvents(localList, remoteList) {
+  function mergeEvents(localList, remoteList, localTombstones) {
     const local = new Map(localList.map((e) => [e.id, e]));
     const remote = new Map(remoteList.map((e) => [e.id, e]));
+    const tombstones = {};
+    Object.keys(localTombstones || {}).forEach((id) => {
+      if (localTombstones[id]) tombstones[id] = localTombstones[id];
+    });
+
     const merged = [];
     const toPush = [];
     const toPull = [];
+    const toPullDeletes = [];
+    const tombAdopt = {};
+    const tombDrop = [];
 
-    local.forEach((mine, id) => {
-      const theirs = remote.get(id);
-      if (!theirs) { merged.push(mine); toPush.push(mine); return; }
-      const a = stamp(mine.updatedAt);
-      const b = stamp(theirs.updatedAt);
-      if (b > a) { merged.push(theirs); toPull.push(theirs); }
-      else if (a > b) { merged.push(mine); toPush.push(mine); }
+    const ids = new Set([...local.keys(), ...remote.keys(), ...Object.keys(tombstones)]);
+
+    for (const id of ids) {
+      const mine = local.get(id) || null;
+      const theirs = remote.get(id) || null;
+      let myTomb = tombstones[id] || null;
+
+      const theirTomb = theirs && theirs.deletedAt ? stamp(theirs.deletedAt) : null;
+      const theirUpd = theirs ? stamp(theirs.updatedAt) : 0;
+      const theirLast = Math.max(theirUpd, theirTomb || 0);
+      const myUpd = mine ? stamp(mine.updatedAt) : 0;
+
+      // A local tombstone loses to a newer local copy of the same id — the
+      // event was re-saved after being deleted. It revives; the tombstone
+      // is dropped so it cannot fire again on a later sync.
+      if (myTomb !== null && mine && myUpd > stamp(myTomb)) {
+        myTomb = null;
+        tombDrop.push(id);
+      }
+
+      if (myTomb !== null) {
+        const mineTs = stamp(myTomb);
+        if (!theirs || mineTs > theirLast) {
+          if (mine) toPullDeletes.push(id);
+          toPush.push({ tombstone: true, id: id, deletedAt: myTomb });
+        } else if (theirLast > mineTs) {
+          if (theirTomb !== null && theirTomb >= theirUpd) {
+            if (mine) toPullDeletes.push(id);
+            tombAdopt[id] = theirs.deletedAt;
+          } else {
+            merged.push(theirs);
+            toPull.push(theirs);
+            tombDrop.push(id);
+          }
+        } else {
+          if (mine) toPullDeletes.push(id);
+        }
+        continue;
+      }
+
+      if (!theirs) {
+        if (mine) { merged.push(mine); toPush.push(mine); }
+        continue;
+      }
+
+      if (theirTomb !== null) {
+        if (mine && myUpd > theirTomb) {
+          merged.push(mine);
+          toPush.push(mine);
+        } else if (mine) {
+          toPullDeletes.push(id);
+          tombAdopt[id] = theirs.deletedAt;
+        }
+        continue;
+      }
+
+      if (!mine) { merged.push(theirs); toPull.push(theirs); continue; }
+
+      if (theirUpd > myUpd) { merged.push(theirs); toPull.push(theirs); }
+      else if (myUpd > theirUpd) { merged.push(mine); toPush.push(mine); }
       else merged.push(mine);
-    });
+    }
 
-    remote.forEach((theirs, id) => {
-      if (!local.has(id)) { merged.push(theirs); toPull.push(theirs); }
-    });
-
-    return { merged, toPush, toPull };
+    return { merged, toPush, toPull, toPullDeletes, tombAdopt, tombDrop };
   }
 
   function classifyError(err) {
@@ -835,6 +957,9 @@ const SyncService = (() => {
     }
     if (code === '42P01' || /relation .* does not exist|Could not find the table/i.test(msg)) {
       return { code: 'syncErrNoTable', detail: msg };
+    }
+    if (code === '42703' || /column .* does not exist/i.test(msg)) {
+      return { code: 'syncErrNoColumn', detail: msg };
     }
     if (code === '42501' || /row-level security|permission denied/i.test(msg)) {
       return { code: 'syncErrRls', detail: msg };
@@ -889,21 +1014,41 @@ const SyncService = (() => {
       if (error) throw error;
 
       const remote = (data || []).map(fromRow);
-      const { merged, toPush, toPull } = mergeEvents(localEvents, remote);
+      const {
+        merged, toPush, toPull, toPullDeletes, tombAdopt, tombDrop,
+      } = mergeEvents(localEvents, remote, StorageService.readTombstones());
 
       if (toPush.length) {
-        const rows = toPush.map((ev) => toRow(ev, config.userKey));
+        const rows = toPush.map((item) =>
+          item.tombstone
+            ? toTombstoneRow(item.id, config.userKey, item.deletedAt)
+            : toRow(item, config.userKey));
         const { error: upErr } = await supabase
           .from(SYNC_TABLE)
           .upsert(rows, { onConflict: 'id' });
         if (upErr) throw upErr;
       }
 
+      // Tombstone bookkeeping is sync's own business: adopt remote
+      // deletions under the server's timestamp, drop lost local ones.
+      if (Object.keys(tombAdopt).length || tombDrop.length) {
+        const cur = StorageService.readTombstones();
+        Object.keys(tombAdopt).forEach((id) => { cur[id] = tombAdopt[id]; });
+        tombDrop.forEach((id) => { delete cur[id]; });
+        const store = ls();
+        if (store) {
+          try { store.setItem(DELETED_KEY, JSON.stringify(cur)); } catch (err) { /* ignore */ }
+        }
+      }
+
       return {
         ok: true,
         merged,
         pushed: toPush.length,
-        pulled: toPull.length,
+        pulled: toPull.length + toPullDeletes.length,
+        toPullDeletes,
+        tombAdopt,
+        tombDrop,
         syncedAt: new Date().toISOString(),
       };
     } catch (err) {
@@ -994,8 +1139,14 @@ create table if not exists public.events (
   color       text default 'blue',
   note        text default '',
   created_at  text,
-  updated_at  text
+  updated_at  text,
+  deleted_at  text
 );
+
+-- Deleting an event keeps its row and stamps deleted_at (a "tombstone"),
+-- so the deletion syncs to your other devices instead of coming back.
+-- Existing tables need this line too — re-running this script is safe.
+alter table public.events add column if not exists deleted_at text;
 
 create index if not exists events_user_key_idx
   on public.events (user_key);
@@ -2003,6 +2154,13 @@ async function runSync() {
     if (!res.ok) { toast(t(res.code)); return; }
     if (res.pulled > 0) {
       await DataService.importAll(res.merged);
+    }
+    if (res.toPullDeletes && res.toPullDeletes.length) {
+      // A remote tombstone won: remove the local rows (the tombstone
+      // bookkeeping already happened inside syncNow).
+      await StorageService.deleteEventsSilent(res.toPullDeletes);
+    }
+    if (res.pulled > 0 || (res.toPullDeletes && res.toPullDeletes.length)) {
       await refreshEvents();
     }
     syncedAt = res.syncedAt;

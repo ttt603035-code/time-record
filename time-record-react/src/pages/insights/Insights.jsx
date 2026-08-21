@@ -32,8 +32,10 @@ export function InsightsPage({
   onGo,
   onBack,
   onEditEvent,
-  lastSyncAt,
-  onRefresh,
+  lastCloudSync,
+  syncOn,
+  syncBusy,
+  onSync,
 }) {
   const [pickerOpen, setPickerOpen] = useState(false);
 

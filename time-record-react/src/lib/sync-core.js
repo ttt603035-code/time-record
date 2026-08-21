@@ -35,6 +35,31 @@ export function toRow(ev, userKey) {
     note: ev.note || '',
     created_at: ev.createdAt,
     updated_at: ev.updatedAt,
+    // Live rows always clear the tombstone column, so an upsert over an
+    // older client's tombstone row revives the event everywhere.
+    deleted_at: null,
+  };
+}
+
+/**
+ * Server-side tombstone: a row for a deleted id. It carries no event payload
+ * — only the id and the deletion timestamp in both timestamp columns, so
+ * last-write-wins can compare it against live rows on any device.
+ */
+export function toTombstoneRow(id, userKey, deletedAtIso) {
+  return {
+    id,
+    user_key: userKey,
+    date: '',
+    start_time: '',
+    end_time: '',
+    title: '',
+    category: '',
+    color: 'blue',
+    note: '',
+    created_at: null,
+    updated_at: deletedAtIso,
+    deleted_at: deletedAtIso,
   };
 }
 
@@ -51,6 +76,7 @@ export function fromRow(row) {
     note: row.note || '',
     createdAt: row.created_at || row.updated_at,
     updatedAt: row.updated_at || row.created_at,
+    deletedAt: row.deleted_at || null,
   };
 }
 
@@ -64,37 +90,130 @@ function stamp(value) {
 /**
  * Decide the result of a two-way sync.
  *
- * Returns the merged list plus the two deltas the caller has to act on:
- *   - `toPush`   rows the server is missing or has an older copy of
- *   - `toPull`   events the server has a newer copy of (already merged in)
+ * Returns the merged list plus the deltas the caller has to act on:
+ *   - `toPush`         rows to upsert: live events as-is, deletions as
+ *                      `{ tombstone: true, id, deletedAt }` markers
+ *   - `toPull`         events the server has a newer copy of (already merged in)
+ *   - `toPullDeletes`  ids of LOCAL events a remote tombstone removed
+ *   - `tombAdopt`      id -> ISO: remote deletions to remember locally
+ *   - `tombDrop`       ids of local tombstones that lost (event re-saved later)
  *
- * Deletions are deliberately NOT synced. A missing row is treated as "the
- * other side has not seen it yet", never as "delete it here" — without
- * tombstones those two cases are indistinguishable, and guessing wrong
- * silently destroys data. Clearing stays a local, explicit action.
+ * Deletions sync as *tombstones* — a timestamped "this id is gone" marker,
+ * locally under DELETED_KEY and server-side in the row's `deleted_at`
+ * column. For any id the newest write wins, and a write is either an event
+ * (its `updatedAt`) or a tombstone (its deletion time). That keeps the old
+ * rule — a row that is merely missing upstream means "the other side has not
+ * seen it yet", never "deleted" — while still letting a delete on one device
+ * remove the event on every other device. Re-saving an id after deletion
+ * (e.g. re-importing it via a Shortcut) beats an older tombstone and revives
+ * the event. Ties keep the existing copy, same as before.
+ *
+ * Clearing all data stays a local, explicit action: it writes no tombstones.
  */
-export function mergeEvents(localList, remoteList) {
+export function mergeEvents(localList, remoteList, localTombstones = null) {
   const local = new Map(localList.map((e) => [e.id, e]));
   const remote = new Map(remoteList.map((e) => [e.id, e]));
+  const tombstones = {};
+  Object.keys(localTombstones || {}).forEach((id) => {
+    if (localTombstones[id]) tombstones[id] = localTombstones[id];
+  });
 
   const merged = [];
   const toPush = [];
   const toPull = [];
+  const toPullDeletes = [];
+  const tombAdopt = {};
+  const tombDrop = [];
 
-  for (const [id, mine] of local) {
-    const theirs = remote.get(id);
-    if (!theirs) {
-      // Server has never seen it.
-      merged.push(mine);
-      toPush.push(mine);
+  const ids = new Set([...local.keys(), ...remote.keys(), ...Object.keys(tombstones)]);
+
+  for (const id of ids) {
+    const mine = local.get(id) || null;
+    const theirs = remote.get(id) || null;
+    let myTomb = tombstones[id] || null;
+
+    const theirTomb = theirs && theirs.deletedAt ? stamp(theirs.deletedAt) : null;
+    const theirUpd = theirs ? stamp(theirs.updatedAt) : 0;
+    const theirLast = Math.max(theirUpd, theirTomb || 0);
+    const myUpd = mine ? stamp(mine.updatedAt) : 0;
+
+    // A local tombstone loses to a newer local copy of the same id — the
+    // event was re-saved after being deleted (a Shortcut re-import uses a
+    // stable id on purpose). The event revives; the tombstone is dropped so
+    // it cannot delete the event again on a later sync.
+    if (myTomb !== null && mine && myUpd > stamp(myTomb)) {
+      myTomb = null;
+      tombDrop.push(id);
+    }
+
+    if (myTomb !== null) {
+      // ── A local deletion is in play ──
+      const mineTs = stamp(myTomb);
+      if (!theirs || mineTs > theirLast) {
+        // The delete is the newest write for this id: it holds locally
+        // (a stale local copy, if any, is removed) and is pushed as a
+        // tombstone row so the other devices catch up.
+        if (mine) toPullDeletes.push(id);
+        toPush.push({ tombstone: true, id, deletedAt: myTomb });
+      } else if (theirLast > mineTs) {
+        // The server has a newer write for this id.
+        if (theirTomb !== null && theirTomb >= theirUpd) {
+          // The newest server write is the tombstone itself: adopt it under
+          // the server's timestamp.
+          if (mine) toPullDeletes.push(id);
+          tombAdopt[id] = theirs.deletedAt;
+        } else {
+          // The newest server write is a live event saved after our delete
+          // (re-saved upstream, e.g. by a Shortcut re-import): it wins, and
+          // the lost tombstone is dropped so it cannot fire again.
+          merged.push(theirs);
+          toPull.push(theirs);
+          tombDrop.push(id);
+        }
+      } else {
+        // Perfect tie with the server's newest write: keep the deletion,
+        // write nothing.
+        if (mine) toPullDeletes.push(id);
+      }
       continue;
     }
-    const mineAt = stamp(mine.updatedAt);
-    const theirsAt = stamp(theirs.updatedAt);
-    if (theirsAt > mineAt) {
+
+    // ── No local tombstone: plain last-write-wins between the two copies ──
+    if (!theirs) {
+      if (mine) {
+        // Server has never seen it.
+        merged.push(mine);
+        toPush.push(mine);
+      }
+      continue;
+    }
+
+    if (theirTomb !== null) {
+      // The server row is a tombstone.
+      if (mine && myUpd > theirTomb) {
+        // Re-saved after the remote delete: the event revives, and pushing
+        // it (with deleted_at = null) clears the tombstone row.
+        merged.push(mine);
+        toPush.push(mine);
+      } else if (mine) {
+        // The remote delete is newer: remove the local copy and remember
+        // the deletion under the server's timestamp.
+        toPullDeletes.push(id);
+        tombAdopt[id] = theirs.deletedAt;
+      }
+      continue;
+    }
+
+    if (!mine) {
       merged.push(theirs);
       toPull.push(theirs);
-    } else if (mineAt > theirsAt) {
+      continue;
+    }
+
+    if (theirUpd > myUpd) {
+      merged.push(theirs);
+      toPull.push(theirs);
+    } else if (myUpd > theirUpd) {
       merged.push(mine);
       toPush.push(mine);
     } else {
@@ -104,14 +223,7 @@ export function mergeEvents(localList, remoteList) {
     }
   }
 
-  for (const [id, theirs] of remote) {
-    if (!local.has(id)) {
-      merged.push(theirs);
-      toPull.push(theirs);
-    }
-  }
-
-  return { merged, toPush, toPull };
+  return { merged, toPush, toPull, toPullDeletes, tombAdopt, tombDrop };
 }
 
 /** Trim and validate what the user typed into the settings sheet. */

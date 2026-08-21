@@ -125,6 +125,11 @@ export function useAppData() {
     return refreshEvents();
   }, [refreshEvents]);
 
+  const removeMany = useCallback(async (ids) => {
+    await DataService.removeMany(ids);
+    return refreshEvents();
+  }, [refreshEvents]);
+
   const saveCategories = useCallback(async (list) => {
     await DataService.saveCategories(list);
     return refreshCategories();
@@ -164,13 +169,27 @@ export function useAppData() {
     setSyncBusy(true);
     try {
       const local = await DataService.exportAll();
-      const res = await syncNow(local, loadConfig());
+      const tombstones = await DataService.getTombstones();
+      const res = await syncNow(local, loadConfig(), tombstones);
       if (!res.ok) {
         toast(t(res.code));
         return;
       }
       if (res.pulled > 0) {
         await DataService.importAll(res.merged);
+      }
+      if (res.toPullDeletes && res.toPullDeletes.length) {
+        // A remote tombstone won: remove the local rows without writing
+        // fresh tombstones.
+        await DataService.removeSilent(res.toPullDeletes);
+      }
+      if (res.tombAdopt && Object.keys(res.tombAdopt).length) {
+        await DataService.adoptTombstones(res.tombAdopt);
+      }
+      if (res.tombDrop && res.tombDrop.length) {
+        await DataService.dropTombstones(res.tombDrop);
+      }
+      if (res.pulled > 0 || (res.toPullDeletes && res.toPullDeletes.length)) {
         await refreshEvents();
       }
       setLastCloudSync(res.syncedAt);
@@ -202,6 +221,7 @@ export function useAppData() {
     createEvent,
     updateEvent,
     removeEvent,
+    removeMany,
     saveCategories,
     clearAll,
     applyLanguage,

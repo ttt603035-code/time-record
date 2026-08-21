@@ -82,8 +82,13 @@ check('Sync chip appears when configured', !!chip);
 check('Chip shows a relative time', /10 min ago/.test(chip?.textContent||''), chip?.textContent);
 check('Chip sits in the topbar (top-right)', chip?.closest('.topbar') !== null);
 check('Chip has an accessible label', (chip?.getAttribute('aria-label')||'').includes('Cloud Sync'), chip?.getAttribute('aria-label'));
-check('Chip icon is lucide refresh-cw',
-  (chip?.querySelector('svg')?.getAttribute('class')||'').includes('refresh-cw'));
+// The React SyncActions is two buttons: a status chip + a refresh action.
+// The refresh control (not the chip) carries the lucide icon.
+const refreshBtn = w2.document.querySelector('#screen-more .topbar button[aria-label="Refresh"]');
+check('Refresh control is the second topbar button',
+  !!refreshBtn && refreshBtn !== chip, refreshBtn?.getAttribute('aria-label'));
+check('Refresh icon is lucide refresh-cw',
+  (refreshBtn?.querySelector('svg')?.getAttribute('class')||'').includes('refresh-cw'));
 
 // timestamp survives a reload
 const w3 = await boot({calendar_sync_v1:cfg, calendar_sync_at_v1:tenMinAgo});

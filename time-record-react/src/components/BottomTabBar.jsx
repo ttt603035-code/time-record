@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useRef } from 'react';
 
+import { CalendarDays, ChartPie } from 'lucide-react';
+
 import { t } from '@/lib/i18n.js';
 
 /**
@@ -18,14 +20,7 @@ import { t } from '@/lib/i18n.js';
 const TABS = [
   {
     id: 'calendar',
-    icon: (
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-        <path d="M8 2v4" />
-        <path d="M16 2v4" />
-        <rect width="18" height="18" x="3" y="4" rx="2" />
-        <path d="M3 10h18" />
-      </svg>
-    ),
+    icon: <CalendarDays aria-hidden="true" />,
   },  {
     id: 'today',
     icon: (
@@ -37,12 +32,7 @@ const TABS = [
   },
   {
     id: 'insights',
-    icon: (
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-        <path d="M21 12c.552 0 1.005-.449.95-.998a10 10 0 0 0-8.953-8.951c-.55-.055-.998.398-.998.95v8a1 1 0 0 0 1 1z" />
-        <path d="M21.21 15.89A10 10 0 1 1 8 2.83" />
-      </svg>
-    ),
+    icon: <ChartPie aria-hidden="true" />,
   },  {
     id: 'more',
     icon: (

@@ -16,11 +16,11 @@ import {
   Collapsible, CollapsibleContent, CollapsibleTrigger,
 } from '@/components/ui/collapsible.jsx';
 import { Separator } from '@/components/ui/separator.jsx';
-import { CATEGORY_KEY, SETTINGS_KEY, STORAGE_KEY } from '@/lib/constants.js';
+import { CATEGORY_KEY, DELETED_KEY, SETTINGS_KEY, STORAGE_KEY, resolveColor } from '@/lib/constants.js';
 import { DataService } from '@/lib/data-service.js';
 import { todayISO } from '@/lib/date.js';
 import { I } from '@/lib/dom.js';
-import { getLang, t } from '@/lib/i18n.js';
+import { formatShortDate, getLang, t } from '@/lib/i18n.js';
 import { toast } from '@/lib/overlays.js';
 import { importPayload } from '@/lib/shortcut-import.js';
 import { StorageService } from '@/lib/storage.js';
@@ -109,7 +109,7 @@ function formatExportLabel(iso) {
 export function MorePage({
   events, categories, lang, theme, lastCloudSync, syncOn, syncBusy, onSync,
   onSyncSaved, onSyncDisconnected, onSaveCategories, onClearAll, onApplyLanguage,
-  onApplyTheme, onImported,
+  onApplyTheme, onImported, onDeleteEvent, onDeleteMany,
 }) {
   const fileInputRef = useRef(null);
   const [keysOpen, setKeysOpen] = useState(false);
@@ -223,6 +223,88 @@ export function MorePage({
     });
   };
 
+  /* ── Manage-by-category data ─────────────────────────────────
+     Events grouped by their category, for the delete-in-place list.
+     Group order: defined templates first (in definition order), then
+     categories that exist only on events (alphabetical), then the
+     uncategorized bucket last. ───────────────────────────────── */
+  const groups = useMemo(() => {
+    const map = new Map();
+    const order = [];
+    const ensure = (name) => {
+      if (!map.has(name)) {
+        const tpl = categories.find((c) => c.name === name);
+        map.set(name, {
+          key: name || '__none__',
+          name,
+          label: name || t('noCategory'),
+          color: tpl ? resolveColor(tpl.color) : null,
+          events: [],
+        });
+        order.push(name);
+      }
+      return map.get(name);
+    };
+    categories.forEach((c) => ensure(c.name));
+    events.forEach((ev) => ensure((ev.category || '').trim()).events.push(ev));
+
+    const templateNames = new Set(categories.map((c) => c.name));
+    const ordered = [...order].sort((a, b) => {
+      if (a === '') return 1;
+      if (b === '') return -1;
+      const at = templateNames.has(a);
+      const bt = templateNames.has(b);
+      if (at && bt) return 0; // stable sort keeps the template definition order
+      if (at) return -1;
+      if (bt) return 1;
+      return a.localeCompare(b);
+    });
+
+    return ordered.map((name) => {
+      const g = map.get(name);
+      if (!g.color) g.color = g.events.length ? resolveColor(g.events[0].color) : resolveColor('gray');
+      g.events.sort((x, y) =>
+        (x.date + x.startTime).localeCompare(y.date + y.startTime));
+      return g;
+    });
+  }, [events, categories, lang]);
+
+  const confirmDeleteOne = (ev) => {
+    showDialog({
+      title: t('deleteEventTitle'),
+      message: '\u201C' + ev.title + '\u201D ' + t('deleteEventMsg'),
+      actions: [
+        { label: t('cancel') },
+        {
+          label: t('delete'),
+          danger: true,
+          onClick: async () => {
+            await onDeleteEvent(ev.id);
+            toast(t('eventDeleted'));
+          },
+        },
+      ],
+    });
+  };
+
+  const confirmDeleteGroup = (g) => {
+    showDialog({
+      title: t('manageDeleteTitle', { n: g.events.length }),
+      message: t('manageDeleteMsg', { s: g.label }),
+      actions: [
+        { label: t('cancel') },
+        {
+          label: t('delete'),
+          danger: true,
+          onClick: async () => {
+            await onDeleteMany(g.events.map((e) => e.id));
+            toast(t('manageDeleted', { n: g.events.length }));
+          },
+        },
+      ],
+    });
+  };
+
   const storageRows = useMemo(() => {
     const rows = [
       { key: STORAGE_KEY, entries: events.length, size: estimatedSize },
@@ -234,6 +316,13 @@ export function MorePage({
       try { raw = window.localStorage.getItem(k) || ''; } catch (e) { /* ignore */ }
       rows.push({ key: k, entries: '—', size: raw.length * 2 });
     });
+    let tombRaw = '';
+    try { tombRaw = window.localStorage.getItem(DELETED_KEY) || ''; } catch (e) { /* ignore */ }
+    if (tombRaw) {
+      let n = 0;
+      try { n = Object.keys(JSON.parse(tombRaw)).length; } catch (e) { /* ignore */ }
+      rows.push({ key: DELETED_KEY, entries: n, size: tombRaw.length * 2 });
+    }
     return rows;
   }, [events, categories, estimatedSize, lang]);
 
@@ -294,6 +383,7 @@ export function MorePage({
 
             {/* Storage keys — a real Collapsible instead of <details> */}
             <Collapsible
+              id="storageKeys"
               open={keysOpen}
               onOpenChange={setKeysOpen}
               className="overflow-hidden rounded-xl border bg-secondary"
@@ -339,6 +429,89 @@ export function MorePage({
                 ))}
               </CollapsibleContent>
             </Collapsible>
+          </CardContent>
+        </Card>
+
+        {/* ── Manage by category */}
+        <Card className="gap-4 overflow-hidden py-4" id="manageDataCard">
+          <CardHeader className="gap-1 px-4">
+            <CardTitle className="text-[15px] font-bold tracking-tight">{t('manageData')}</CardTitle>
+            <CardDescription className="text-xs leading-relaxed">
+              {t('manageDataDesc')}
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="px-0">
+            {events.length === 0 ? (
+              <p className="px-6 py-3 text-xs text-muted-foreground">{t('noEvents')}</p>
+            ) : (
+              <div className="flex flex-col">
+                {groups.map((g, gi) => (
+                  <div key={g.key}>
+                    {gi > 0 ? <Separator className="bg-border/60" /> : null}
+                    <Collapsible defaultOpen={gi === 0}>
+                      <div className="flex items-center gap-1 px-2">
+                        <CollapsibleTrigger
+                          className="flex min-w-0 flex-1 items-center gap-2 px-1 py-3 select-none"
+                        >
+                          <span
+                            className="size-2.5 shrink-0 rounded-full"
+                            style={{ background: g.color }}
+                          />
+                          <span className="truncate text-[13px] font-semibold">{g.label}</span>
+                          <span className="shrink-0 text-[11px] font-medium text-muted-foreground">
+                            {g.events.length}
+                          </span>
+                          <Icon
+                            className="ml-auto size-3.5 shrink-0 text-muted-foreground
+                                       transition-transform data-[state=open]:rotate-180 [&_svg]:size-3.5"
+                            svg={I.chevDown}
+                          />
+                        </CollapsibleTrigger>
+                        <button
+                          type="button"
+                          onClick={() => confirmDeleteGroup(g)}
+                          aria-label={t('manageDeleteAll') + ' — ' + g.label}
+                          className="h-8 shrink-0 rounded-md px-2 text-[11px] font-semibold
+                                     text-muted-foreground transition-colors hover:text-destructive
+                                     active:text-destructive"
+                        >
+                          {t('manageDeleteAll')}
+                        </button>
+                      </div>
+                      <CollapsibleContent
+                        className="overflow-hidden data-[state=closed]:animate-collapsible-up
+                                   data-[state=open]:animate-collapsible-down"
+                      >
+                        <div className="flex flex-col pb-1.5">
+                          {g.events.map((ev) => (
+                            <div key={ev.id} className="manage-row flex items-center gap-1 py-1 pl-3 pr-2">
+                              <div className="min-w-0 flex-1">
+                                <div className="truncate text-[13px] font-medium leading-snug">
+                                  {ev.title}
+                                </div>
+                                <div className="text-[11px] leading-snug text-muted-foreground">
+                                  {formatShortDate(ev.date)} · {ev.startTime}–{ev.endTime}
+                                </div>
+                              </div>
+                              <button
+                                type="button"
+                                onClick={() => confirmDeleteOne(ev)}
+                                aria-label={t('deleteAria', { s: ev.title })}
+                                className="flex size-8 shrink-0 items-center justify-center rounded-md
+                                           text-muted-foreground transition-colors hover:text-destructive
+                                           active:text-destructive"
+                              >
+                                <Icon className="[&_svg]:size-4" svg={I.trash} />
+                              </button>
+                            </div>
+                          ))}
+                        </div>
+                      </CollapsibleContent>
+                    </Collapsible>
+                  </div>
+                ))}
+              </div>
+            )}
           </CardContent>
         </Card>
 

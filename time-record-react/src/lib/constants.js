@@ -8,6 +8,10 @@
 export const STORAGE_KEY = 'calendar_events_v1';
 export const CATEGORY_KEY = 'calendar_categories_v1';
 export const SETTINGS_KEY = 'calendar_settings_v1';
+// Deletion tombstones for Cloud Sync: { [eventId]: deletionTimestamp }.
+// Lets a delete on one device propagate to the others instead of the
+// event being pulled back from the cloud on the next sync.
+export const DELETED_KEY = 'calendar_deleted_v1';
 
 export const MONTHS_SHORT = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 export const MONTHS_LONG = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];

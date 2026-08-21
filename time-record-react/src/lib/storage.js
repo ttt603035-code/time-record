@@ -7,7 +7,7 @@
    the same methods; nothing else changes.
    ============================================================ */
 
-import { STORAGE_KEY, CATEGORY_KEY, SETTINGS_KEY } from './constants.js';
+import { STORAGE_KEY, CATEGORY_KEY, SETTINGS_KEY, DELETED_KEY } from './constants.js';
 import { normalizeEvent, normalizeImport, normalizeCategory } from './model.js';
 
 export const StorageService = (() => {
@@ -95,10 +95,80 @@ export const StorageService = (() => {
     return ev;
   }
 
-  async function deleteEvent(id) {
+  /**
+   * Remove an event. Unless `tombstone: false`, the deletion is recorded in
+   * the tombstone map so Cloud Sync can propagate it to other devices
+   * (see DELETED_KEY). Sync-driven deletions pass `tombstone: false` because
+   * they carry the server's own deletion timestamp.
+   */
+  async function deleteEvent(id, opts = {}) {
     const events = await getEvents();
     await saveEvents(events.filter((x) => x.id !== id));
+    if (opts.tombstone !== false) await addTombstones({ [id]: new Date().toISOString() });
     return true;
+  }
+
+  async function deleteEvents(ids, opts = {}) {
+    const set = new Set(ids);
+    const events = await getEvents();
+    await saveEvents(events.filter((x) => !set.has(x.id)));
+    if (opts.tombstone !== false) {
+      const now = new Date().toISOString();
+      const map = {};
+      ids.forEach((id) => { map[id] = now; });
+      await addTombstones(map);
+    }
+    return true;
+  }
+
+  /* ── Deletion tombstones (Cloud Sync) ──────────────────────
+     { [eventId]: deletionTimestamp }. A tombstone says "this id is gone as
+     of this moment", which is the only way to sync a deletion without
+     destroying data: a row that is merely missing upstream means "the other
+     side has not seen it yet", and guessing that it means "deleted" would
+     silently wipe events.
+
+     clearAll() deliberately does NOT touch tombstones: clearing everything
+     is a local, explicit action, while individual deletes are a global
+     intent that syncs. ─────────────────────────────────────── */
+  let memoryTombstones = null;
+
+  async function getTombstones() {
+    if (memoryTombstones) return { ...memoryTombstones };
+    if (!ls) { memoryTombstones = {}; return {}; }
+    let raw = null;
+    try { raw = ls.getItem(DELETED_KEY); } catch (err) { raw = null; }
+    if (raw === null) { memoryTombstones = {}; return {}; }
+    try {
+      const obj = JSON.parse(raw);
+      memoryTombstones = (obj && typeof obj === 'object' && !Array.isArray(obj)) ? obj : {};
+    } catch (err) { memoryTombstones = {}; }
+    return { ...memoryTombstones };
+  }
+
+  async function writeTombstones(map) {
+    memoryTombstones = { ...map };
+    if (!ls) return false;
+    try { ls.setItem(DELETED_KEY, JSON.stringify(memoryTombstones)); return true; }
+    catch (err) { return false; }
+  }
+
+  async function addTombstones(map) {
+    const cur = await getTombstones();
+    let changed = false;
+    Object.keys(map || {}).forEach((id) => {
+      if (map[id]) { cur[id] = map[id]; changed = true; }
+    });
+    if (changed) await writeTombstones(cur);
+  }
+
+  async function dropTombstones(ids) {
+    const cur = await getTombstones();
+    let changed = false;
+    (ids || []).forEach((id) => {
+      if (Object.prototype.hasOwnProperty.call(cur, id)) { delete cur[id]; changed = true; }
+    });
+    if (changed) await writeTombstones(cur);
   }
 
   async function importEvents(data) {
@@ -201,12 +271,16 @@ export const StorageService = (() => {
     addEvent,
     updateEvent,
     deleteEvent,
+    deleteEvents,
     importEvents,
     exportEvents,
     clearAll,
     getCategories,
     saveCategories,
     backupKeys,
+    getTombstones,
+    addTombstones,
+    dropTombstones,
     getSetting,
     setSetting,
     get available() { return available; },
