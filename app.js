@@ -209,6 +209,16 @@ const I18N = {
     deleteForeverMsg: 'will be permanently removed, here and in the cloud.',
     emptyTrashTitle: 'Empty trash?',
     emptyTrashMsg: 'All events in the Trash will be permanently removed, here and in the cloud.',
+    manageData: 'Manage Data',
+    manageDataDesc: 'Browse your events by category. Deleting moves them to the Trash — empty the Trash to erase them here and in the cloud.',
+    manageModalHint: 'Deleted events go to the Trash: restore them there, or empty the Trash to erase them here and in the cloud.',
+    manageDeleteAll: 'Delete all',
+    manageDeleteAllTitle: 'Delete all %n events in this category?',
+    manageDeleteAllMsg: 'They will be moved to the Trash, where you can restore or permanently delete them.',
+    manageDeletedAll: 'Moved %n events to the Trash',
+    manageEmpty: 'No events in this category.',
+    noCategory: 'No category',
+    deleteAria: 'Delete %s',
     templateAppliedN: 'Template saved — %n events recolored',
   },
   zh: {
@@ -312,6 +322,16 @@ const I18N = {
     deleteForeverMsg: '将被永久删除（包括云端副本）。',
     emptyTrashTitle: '清空垃圾箱？',
     emptyTrashMsg: '垃圾箱中的所有日程将被永久删除（包括云端副本）。',
+    manageData: '管理数据',
+    manageDataDesc: '按分类查看日程数据。删除的日程会先进入垃圾箱——在垃圾箱清空即可彻底删除（含云端副本）。',
+    manageModalHint: '删除的日程会进入垃圾箱：可恢复，或清空垃圾箱彻底删除（含云端副本）。',
+    manageDeleteAll: '全部删除',
+    manageDeleteAllTitle: '删除该分类下的全部 %n 条日程？',
+    manageDeleteAllMsg: '这些日程将被移入垃圾箱，之后可恢复或彻底删除。',
+    manageDeletedAll: '已将 %n 条日程移入垃圾箱',
+    manageEmpty: '该分类暂无日程。',
+    noCategory: '未分类',
+    deleteAria: '删除 %s',
     templateAppliedN: '模板已保存 — 已统一 %n 个日程的颜色',
   },
 };
@@ -2380,7 +2400,7 @@ function openSearchModal() {
 }
 
 /* ============================================================
-   17. MORE SCREEN  (Data / About)
+   17. MORE SCREEN  (Data / Manage Data / Trash / About)
    ============================================================ */
 
 function formatBytes(bytes) {
@@ -2794,6 +2814,19 @@ function renderMoreScreen() {
   dataCard.appendChild(storageKeysBlock());
   groups.appendChild(dataCard);
 
+  // ── Manage Data (per category — delete into the Trash)
+  const manageCard = settingsCard();
+  manageCard.appendChild(settingsHead(t('manageData'), t('manageDataDesc')));
+  const mgRows = el('div', 'settings-rows');
+  const mgGroups = groupEventsByCategory();
+  if (!mgGroups.length) {
+    mgRows.appendChild(el('div', 'manage-empty-row', t('noEvents')));
+  } else {
+    mgGroups.forEach((g) => mgRows.appendChild(manageCategoryRow(g)));
+  }
+  manageCard.appendChild(mgRows);
+  groups.appendChild(manageCard);
+
   // ── Cloud Sync
   groups.appendChild(syncCard());
 
@@ -3062,9 +3095,15 @@ function buildTrashBody() {
             label: t('delete'),
             danger: true,
             onClick: async () => {
-              // Erase the cloud copy too (best-effort) so it cannot be pulled back.
+              // Erase the cloud copy first so it cannot be pulled back; only
+              // drop the tombstone when the cloud row is really gone —
+              // otherwise the next sync would resurrect the event.
               if (!item.cloudDeleted && SyncService.isConfigured()) {
-                await SyncService.deleteRemote([item.id]);
+                const res = await SyncService.deleteRemote([item.id]);
+                if (!res.ok) {
+                  toast(t('syncAutoFailed', { s: SyncService.syncFailText(res) }));
+                  return;
+                }
               }
               await DataService.purgeTrash(item.id);
               await refreshEvents();
@@ -3102,7 +3141,11 @@ function buildTrashFooter() {
               onClick: async () => {
                 const pending = state.trash.filter((x) => !x.cloudDeleted).map((x) => x.id);
                 if (pending.length && SyncService.isConfigured()) {
-                  await SyncService.deleteRemote(pending);
+                  const res = await SyncService.deleteRemote(pending);
+                  if (!res.ok) {
+                    toast(t('syncAutoFailed', { s: SyncService.syncFailText(res) }));
+                    return;
+                  }
                 }
                 await DataService.emptyTrash();
                 await refreshEvents();
@@ -3117,6 +3160,209 @@ function buildTrashFooter() {
     }));
   }
   return foot;
+}
+
+/* ── Manage Data — browse and delete events grouped by category ────────────
+   More → Manage Data: every category is one row; tapping it opens a small
+   popup listing that category's events. Deleting (one or all) uses the same
+   tombstone path as every other delete, so events land in the Trash and sync
+   erases their cloud copies instead of pulling them back. ───────────────── */
+
+let manageApi = null;
+/** Category key of the open popup ('' = uncategorized, null = closed). The
+    group itself is re-derived from fresh state on every render. */
+let manageKey = null;
+
+/**
+ * Events grouped by their category. Order: defined templates first (in
+ * definition order), then categories that exist only on events
+ * (alphabetical), then the uncategorized bucket last. Groups with no events
+ * are dropped — the list only shows data that actually exists.
+ */
+function groupEventsByCategory() {
+  const map = new Map();
+  const order = [];
+  const ensure = (name) => {
+    if (!map.has(name)) {
+      const tpl = state.categories.find((c) => c.name === name);
+      map.set(name, {
+        key: name || '__none__',
+        name: name,
+        label: name || t('noCategory'),
+        color: tpl ? resolveColor(tpl.color) : null,
+        events: [],
+      });
+      order.push(name);
+    }
+    return map.get(name);
+  };
+  state.categories.forEach((c) => ensure(c.name));
+  state.events.forEach((ev) => ensure((ev.category || '').trim()).events.push(ev));
+
+  const templateNames = new Set(state.categories.map((c) => c.name));
+  const ordered = [...order].sort((a, b) => {
+    if (a === '') return 1;
+    if (b === '') return -1;
+    const at = templateNames.has(a);
+    const bt = templateNames.has(b);
+    if (at && bt) return 0; // stable sort keeps the template definition order
+    if (at) return -1;
+    if (bt) return 1;
+    return a.localeCompare(b);
+  });
+
+  return ordered
+    .map((name) => {
+      const g = map.get(name);
+      if (!g.color) g.color = g.events.length ? resolveColor(g.events[0].color) : resolveColor('gray');
+      g.events.sort((x, y) => (x.date + x.startTime).localeCompare(y.date + y.startTime));
+      return g;
+    })
+    .filter((g) => g.events.length > 0);
+}
+
+/** One tappable category row in the More → Manage Data card. */
+function manageCategoryRow(g) {
+  const b = el('button', 'settings-row manage-row');
+  b.type = 'button';
+  const dot = el('span', 'manage-dot');
+  dot.style.setProperty('--c', g.color);
+  b.appendChild(dot);
+  b.appendChild(el('span', 'row-label manage-label', g.label));
+  const n = g.events.length;
+  b.appendChild(el('span', 'row-value', n === 1 ? t('oneEventUsed') : t('eventsUsed', { n })));
+  const chev = el('span', 'row-chev');
+  chev.innerHTML = I.chevR;
+  b.appendChild(chev);
+  b.addEventListener('click', () => openManageCategoryModal(g.key));
+  return b;
+}
+
+/** The live group for the open popup (or null when its category is empty). */
+function currentManageGroup() {
+  if (manageKey === null) return null;
+  return groupEventsByCategory().find((g) => g.key === manageKey) || null;
+}
+
+function manageModalTitle() {
+  if (manageKey === null) return '';
+  return manageKey === '' ? t('noCategory') : manageKey;
+}
+
+function openManageCategoryModal(key) {
+  manageKey = key;
+  if (manageApi && !manageApi.closed) {
+    manageApi.setContent(buildManageBody(), buildManageFooter(), manageModalTitle());
+    return;
+  }
+  manageApi = openStudyModal({
+    title: manageModalTitle(),
+    body: buildManageBody(),
+    footer: buildManageFooter(),
+    onClose: () => { manageApi = null; manageKey = null; },
+  });
+}
+
+function rerenderManageModal() {
+  if (manageApi && !manageApi.closed) {
+    manageApi.setContent(buildManageBody(), buildManageFooter(), manageModalTitle());
+  }
+}
+
+function buildManageBody() {
+  const body = el('div');
+  const list = el('div', 'tpl-list');
+  body.appendChild(list);
+
+  const group = currentManageGroup();
+  if (!group) {
+    list.appendChild(el('div', 'tpl-empty', t('manageEmpty')));
+    return body;
+  }
+
+  group.events.forEach((e) => {
+    const row = el('div', 'tpl-row manage-ev-row');
+    const dot = el('span', 'tpl-dot');
+    dot.style.setProperty('--c', resolveColor(e.color));
+    const main = el('span', 'tpl-name sr-main');
+    main.appendChild(el('span', 'sr-title', e.title));
+    const bits = [formatShortDate(e.date), e.startTime + '–' + e.endTime];
+    main.appendChild(el('span', 'sr-meta', bits.join(' · ')));
+
+    const delBtn = el('button', 'tpl-del-btn');
+    delBtn.type = 'button';
+    delBtn.setAttribute('aria-label', t('deleteAria', { s: e.title }));
+    delBtn.title = t('delete');
+    delBtn.innerHTML = I.trash;
+    delBtn.addEventListener('click', () => confirmDeleteManaged(e.id));
+
+    row.append(dot, main, delBtn);
+    list.appendChild(row);
+  });
+  return body;
+}
+
+function buildManageFooter() {
+  const foot = el('div', 'study-modal-foot');
+  const hint = el('span', 'modal-hint', t('manageModalHint'));
+  foot.appendChild(hint);
+  const group = currentManageGroup();
+  if (group) {
+    foot.appendChild(segButton(t('manageDeleteAll'), {
+      danger: true,
+      icon: I.trash,
+      onClick: () => confirmDeleteManagedAll(group),
+    }));
+  }
+  return foot;
+}
+
+function confirmDeleteManaged(id) {
+  const ev = state.events.find((x) => x.id === id);
+  showDialog({
+    title: t('deleteEventTitle'),
+    message: '“' + (ev ? ev.title : id) + '” ' + t('deleteEventMsg'),
+    actions: [
+      { label: t('cancel') },
+      {
+        label: t('delete'),
+        danger: true,
+        onClick: async () => {
+          await DataService.remove(id);
+          await refreshEvents();
+          refreshAll();
+          rerenderManageModal();
+          toast(t('eventDeleted'));
+        },
+      },
+    ],
+  });
+}
+
+function confirmDeleteManagedAll(group) {
+  const n = group.events.length;
+  showDialog({
+    title: t('manageDeleteAllTitle', { n }),
+    message: t('manageDeleteAllMsg'),
+    actions: [
+      { label: t('cancel') },
+      {
+        label: t('delete'),
+        danger: true,
+        onClick: async () => {
+          // Sequential on purpose: each delete writes its tombstone to the
+          // Trash, so every one of them is safe from the next cloud pull.
+          for (const ev of group.events.slice()) {
+            await DataService.remove(ev.id);
+          }
+          await refreshEvents();
+          refreshAll();
+          rerenderManageModal();
+          toast(t('manageDeletedAll', { n }));
+        },
+      },
+    ],
+  });
 }
 
 let tplApi = null;

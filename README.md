@@ -39,7 +39,7 @@ no sidebar, no dashboard, no StudyHub navigation.
 14. Calendar grid (+ swipe)
 15. Day detail
 16. Today screen (+ 16b keyword search)
-17. More screen (Data / Trash / About)
+17. More screen (Data / Manage Data / Trash / About)
 18. Month/year selector
 19. Event form sheet (add/edit/delete)
 20. Navigation & rendering
@@ -146,6 +146,8 @@ is off until you configure it, and turning it off changes nothing locally. See
 - **Calendar / Today / Insights / More** — floating capsule tabs
 - **Insights** — Day/Week/Month/Year time analytics with donut → Category → Task → Session drill-down, all derived automatically from your events
 - **More → Data** — export JSON, import JSON, clear all data + live storage-key list
+- **More → Manage Data** — every category in one list; tap a category to open a popup with its events, delete one or all (they go to the Trash first, never straight out of the cloud)
+- **More → Trash** — deleted events wait here: restore one, delete forever (cloud copy too), or empty the whole bin
 - **More → Event Templates** — add / edit / delete your categories (they feed the event form)
 - **More → Language** — English / 中文 interface switch (persisted)
 - **More → Cloud Sync** — optional Supabase mirror (set up, test, sync now, disconnect)
@@ -201,11 +203,18 @@ Last-write-wins on each event's `updatedAt`:
 - the same event edited on both → the more recent edit wins
 - identical timestamps → the local copy is kept and nothing is written
 
-**Deletions are not synced.** Without tombstones, "this row is missing" and
-"this row was deleted" look identical, and guessing wrong destroys data
-silently. So deleting an event on one device does not delete it elsewhere, and
-the next sync will copy it back from whichever device still has it. Clearing
-data stays a local, explicit action.
+**Deletions go to the Trash first.** Deleting an event moves it to this
+device's Trash (More → Trash) where it can be restored; entries clear
+automatically after 2 days. While an event is in the Trash, sync will not
+bring it back: the next sync also erases the event's cloud copy, so a deleted
+event cannot be pulled back onto the device that deleted it — **More → Manage
+Data** deletes whole categories the same way, and emptying the Trash removes
+the cloud copies too (if the cloud delete fails, the tombstone is kept so the
+next refresh cannot resurrect the event). Deletion is not pushed to your other
+devices by itself — a device that still holds the event keeps its copy (that
+is deliberate: the Trash is how you recover from an accidental delete).
+**Clear all** stays a local, explicit action and never wipes the cloud or your
+other devices.
 
 ### Security — read this before using it
 
