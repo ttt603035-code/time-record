@@ -327,7 +327,8 @@ check('Every manage group has a delete-all action',
   `${$$(doc, '#manageDataCard button[aria-label^="Delete all"]').length} actions`);
 
 // Delete one event from the list: confirmation dialog, then the event is
-// gone from storage and a tombstone is recorded for Cloud Sync.
+// gone from storage and the open group re-renders without it.
+const rowsBeforeDelete = manageRows().length;
 const firstRow = manageRows()[0];
 clickEl(window, firstRow.querySelector('button[aria-label^="Delete"]'));
 await tick(450);
@@ -338,13 +339,8 @@ await tick(700);
 const afterManageDelete = JSON.parse(window.localStorage.getItem('calendar_events_v1')).events;
 check('Event deleted from storage via the manage list',
   afterManageDelete.length === DEMO_COUNT - 1, `${DEMO_COUNT} → ${afterManageDelete.length}`);
-// The tombstone must name the deleted event (the demo data repeats titles,
-// so match on id: exactly one tombstone, and that id is gone from storage).
-const tombstones = JSON.parse(window.localStorage.getItem('calendar_deleted_v1') || '{}');
-const tombIds = Object.keys(tombstones);
-check('Deletion records a tombstone for sync',
-  tombIds.length === 1 && !afterManageDelete.some((e) => e.id === tombIds[0]),
-  JSON.stringify(tombIds));
+check('Manage list re-renders after the delete',
+  manageRows().length === rowsBeforeDelete - 1, `${rowsBeforeDelete} → ${manageRows().length}`);
 
 // The storage-key table now lives in a Collapsible, so it is only in the DOM
 // once expanded — open it before asserting.

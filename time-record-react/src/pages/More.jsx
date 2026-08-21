@@ -16,7 +16,7 @@ import {
   Collapsible, CollapsibleContent, CollapsibleTrigger,
 } from '@/components/ui/collapsible.jsx';
 import { Separator } from '@/components/ui/separator.jsx';
-import { CATEGORY_KEY, DELETED_KEY, SETTINGS_KEY, STORAGE_KEY, resolveColor } from '@/lib/constants.js';
+import { CATEGORY_KEY, SETTINGS_KEY, STORAGE_KEY, resolveColor } from '@/lib/constants.js';
 import { DataService } from '@/lib/data-service.js';
 import { todayISO } from '@/lib/date.js';
 import { I } from '@/lib/dom.js';
@@ -107,7 +107,7 @@ function formatExportLabel(iso) {
 }
 
 export function MorePage({
-  events, categories, lang, theme, lastCloudSync, syncOn, syncBusy, onSync,
+  events, categories, lang, theme, lastCloudSync, syncOn, syncBusy, syncError, onSync,
   onSyncSaved, onSyncDisconnected, onSaveCategories, onClearAll, onApplyLanguage,
   onApplyTheme, onImported, onDeleteEvent, onDeleteMany,
 }) {
@@ -316,13 +316,6 @@ export function MorePage({
       try { raw = window.localStorage.getItem(k) || ''; } catch (e) { /* ignore */ }
       rows.push({ key: k, entries: '—', size: raw.length * 2 });
     });
-    let tombRaw = '';
-    try { tombRaw = window.localStorage.getItem(DELETED_KEY) || ''; } catch (e) { /* ignore */ }
-    if (tombRaw) {
-      let n = 0;
-      try { n = Object.keys(JSON.parse(tombRaw)).length; } catch (e) { /* ignore */ }
-      rows.push({ key: DELETED_KEY, entries: n, size: tombRaw.length * 2 });
-    }
     return rows;
   }, [events, categories, estimatedSize, lang]);
 
@@ -335,6 +328,7 @@ export function MorePage({
             lastCloudSync={lastCloudSync}
             syncOn={syncOn}
             syncBusy={syncBusy}
+            syncError={syncError}
             onSync={onSync}
             hideWhenOff
           />
@@ -531,15 +525,17 @@ export function MorePage({
                 {syncOn ? t('syncOn') : t('syncOff')}
               </span>
             </CardTitle>
-            <CardDescription className="text-xs leading-relaxed">
-              {syncOn
-                ? t('syncLast', {
+            <CardDescription className="text-xs leading-relaxed whitespace-pre-line">
+              {/* A failed sync must say WHY — the reason is the only thing that
+                  tells the user whether to fix the URL, the key or the table. */}
+              {!syncOn ? t('syncDesc') : (syncError
+                ? `${t(syncError.code)}${syncError.detail ? `\n${t('syncErrDetail', { s: syncError.detail })}` : ''}`
+                : t('syncLast', {
                   s: (() => {
                     const { key, vars, literal } = formatSyncTime(lastCloudSync);
                     return literal ?? t(key, vars || undefined);
                   })(),
-                })
-                : t('syncDesc')}
+                }))}
             </CardDescription>
           </CardHeader>
           <CardContent className="flex flex-wrap gap-2 px-4">

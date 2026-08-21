@@ -11,7 +11,7 @@ function fmtNow() {
   return pad2(n.getHours()) + ':' + pad2(n.getMinutes());
 }
 
-export function TodayPage({ events, onAddEvent, onEditEvent, lastCloudSync, syncOn, syncBusy, onSync }) {
+export function TodayPage({ events, onAddEvent, onEditEvent, lastCloudSync, syncOn, syncBusy, syncError, onSync }) {
   // The legacy app refreshed the "Now" chip every 30 seconds.
   const [nowText, setNowText] = useState(fmtNow);
   const [nowMin, setNowMin] = useState(currentMinutes);
@@ -39,7 +39,13 @@ export function TodayPage({ events, onAddEvent, onEditEvent, lastCloudSync, sync
       <header className="topbar">
         <h1 className="page-title">{t('today')}</h1>
         <div className="topbar-end">
-          <SyncActions lastCloudSync={lastCloudSync} syncOn={syncOn} syncBusy={syncBusy} onSync={onSync} />
+          <SyncActions
+            lastCloudSync={lastCloudSync}
+            syncOn={syncOn}
+            syncBusy={syncBusy}
+            syncError={syncError}
+            onSync={onSync}
+          />
           <button
             className="add-btn"
             id="btnAddToday"

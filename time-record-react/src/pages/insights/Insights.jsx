@@ -35,6 +35,7 @@ export function InsightsPage({
   lastCloudSync,
   syncOn,
   syncBusy,
+  syncError,
   onSync,
 }) {
   const [pickerOpen, setPickerOpen] = useState(false);
@@ -51,7 +52,13 @@ export function InsightsPage({
       <header className="topbar">
         <h1 className="page-title">{t('insights')}</h1>
         <div className="topbar-end">
-          <SyncActions lastCloudSync={lastCloudSync} syncOn={syncOn} syncBusy={syncBusy} onSync={onSync} />
+          <SyncActions
+            lastCloudSync={lastCloudSync}
+            syncOn={syncOn}
+            syncBusy={syncBusy}
+            syncError={syncError}
+            onSync={onSync}
+          />
         </div>
       </header>
 

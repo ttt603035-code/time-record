@@ -38,8 +38,8 @@ no sidebar, no dashboard, no StudyHub navigation.
 13. Demo data (seeded **once**, never overwrites)
 14. Calendar grid (+ swipe)
 15. Day detail
-16. Today screen
-17. More screen (Data / About)
+16. Today screen (+ 16b keyword search)
+17. More screen (Data / Trash / About)
 18. Month/year selector
 19. Event form sheet (add/edit/delete)
 20. Navigation & rendering
@@ -59,13 +59,14 @@ UI (render functions)
 
 - Storage key: **`calendar_events_v1`** (stable) for events
 - Storage key: **`calendar_categories_v1`** for event templates/categories
-- Storage key: **`calendar_deleted_v1`** for deletion tombstones (Cloud Sync)
+- Storage key: **`calendar_trash_v1`** for the Trash (deleted events, restorable)
+- Storage key: **`calendar_tpl_trash_v1`** for deleted-template tombstones
 - Event value: `{ "version": 1, "events": [ … ] }`
 - **The UI never calls `localStorage` directly.** All persistence goes through
   `StorageService` (`getEvents`, `saveEvents`, `addEvent`, `updateEvent`,
-  `deleteEvent`, `deleteEvents`, `importEvents`, `exportEvents`, `clearAll`,
-  tombstone accessors `getTombstones` / `addTombstones` / `dropTombstones`,
-  plus `getCategories` / `saveCategories`).
+  `deleteEvent`, `importEvents`, `exportEvents`, `clearAll`, the Trash
+  accessors `getTrash` / `restoreEvent` / `emptyTrash`, plus
+  `getCategories` / `saveCategories`).
 - `DataService.importAll(data)` already accepts an array **or** an
   `{events:[…]}` envelope — the entry point for a future Apple Shortcuts
   pipeline.
@@ -148,7 +149,7 @@ is off until you configure it, and turning it off changes nothing locally. See
 - **Calendar / Today / Insights / More** — floating capsule tabs
 - **Insights** — Day/Week/Month/Year time analytics with donut → Category → Task → Session drill-down, all derived automatically from your events
 - **More → Data** — export JSON, import JSON, clear all data + live storage-key list
-- **More → Manage by category** — every event grouped by category, each row with a delete button (plus delete-all per category); ideal for cleaning up sample data after a new-device sync
+- **More → Trash** — deleted events wait here for 2 days: restore one, delete forever, or empty the whole bin
 - **More → Event Templates** — add / edit / delete your categories (they feed the event form)
 - **More → Language** — English / 中文 interface switch (persisted)
 - **More → Cloud Sync** — optional Supabase mirror (set up, test, sync now, disconnect)
@@ -161,9 +162,7 @@ Off by default. Everything keeps working locally whether you turn it on or not.
 
 In your Supabase project, open **SQL Editor** and run the script shown under
 **More → Cloud Sync → Set up → Create the table** (there is a Copy button).
-It creates `public.events` (including the `deleted_at` tombstone column), an
-index on `user_key`, and an RLS policy. Re-running it later is safe — that is
-how an existing table gains the `deleted_at` column.
+It creates `public.events`, an index on `user_key`, and an RLS policy.
 
 ### 2. Connect the app
 
@@ -181,8 +180,22 @@ sync that is plainly off.
 
 ### 3. Sync
 
-Tap **Sync now** on each device. Sync is manual on purpose: nothing leaves the
-device until you ask it to.
+Once configured, the board pulls automatically: on launch, when the tab/window
+regains focus, and when you open **Today / Calendar / Insights** (throttled to
+one request per 15 s). That is what makes the iPhone Shortcut flow work — a
+record posted seconds ago is on screen when you open the site. **Sync now** in
+More still forces an immediate round-trip, and a failure shows the reason (no
+table / key rejected / blocked by RLS / network), not just "failed".
+
+### Shortcut → Supabase (写入端)
+
+Recording still happens in the iPhone Shortcut `time record 1`; the site is a
+read-only board. To have the Shortcut POST each finished record to the same
+`events` table, follow **[docs/shortcuts-step-by-step.md](docs/shortcuts-step-by-step.md)**
+(手把手：建库、逐个动作怎么填、验收、排错) or the reference sheet
+**[docs/shortcuts-supabase.md](docs/shortcuts-supabase.md)** — exact URL,
+headers, JSON body, how to generate `id`, and how the fields map to the
+calendar event title.
 
 ### How conflicts are resolved
 
@@ -192,24 +205,15 @@ Last-write-wins on each event's `updatedAt`:
 - the same event edited on both → the more recent edit wins
 - identical timestamps → the local copy is kept and nothing is written
 
-**Deletions are synced as tombstones.** Deleting an event stamps the id with a
-deletion time — stored locally under `calendar_deleted_v1` and, after the next
-sync, in the row's `deleted_at` column in the cloud. The newest write for an id
-always wins (edit or delete), so:
-
-- deleting an event on one device removes it on **every** device after they
-  sync — including sample data you no longer want
-- re-saving an id after deletion (e.g. re-importing via a Shortcut, which uses
-  a stable id) revives the event and clears the tombstone
-- a row that is merely *missing* upstream is still "not seen yet", never
-  "deleted" — guessing that destroys data silently, so it is never assumed
-
-**Clear all** stays a local, explicit action: it writes no tombstones and never
+**Deletions go to the Trash first.** Deleting an event moves it to this
+device's Trash (More → Trash) where it can be restored; entries clear
+automatically after 2 days. While an event is in the Trash, sync will not
+bring it back: the next sync also erases the event's cloud copy, so a deleted
+event cannot be pulled back onto the device that deleted it. Deletion is not
+pushed to your other devices by itself — a device that still holds the event
+keeps its copy (that is deliberate: the Trash is how you recover from an
+accidental delete). **Clear all** stays a local, explicit action and never
 wipes the cloud or your other devices.
-
-Existing tables need the `deleted_at` column: re-run the setup script once
-(it is idempotent — `add column if not exists`). Until then, sync reports
-*“Table is missing the deleted_at column — run the setup SQL again”*.
 
 ### Security — read this before using it
 

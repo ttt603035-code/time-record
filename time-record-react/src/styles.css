@@ -1986,30 +1986,38 @@ textarea.text-input { resize: none; line-height: 1.45; }
 .topbar-end { display: flex; align-items: center; gap: 8px; flex: 0 0 auto; }
 .sync-actions { display: flex; align-items: center; gap: 6px; }
 .sync-chip { font-variant-numeric: tabular-nums; }
-button.chip.sync-chip {
+button.chip.sync-chip,
+button.chip.sync-refresh {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  height: 30px;
+  min-height: 30px;
+  margin: 0;
+  padding: 0 12px;
+  font-size: 12.5px;
+  font-weight: 600;
+  line-height: 1;
+  color: var(--text-2);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-pill);
   width: auto;
-  height: auto;
   min-width: 0;
   flex: 0 0 auto;
   white-space: nowrap;
-  color: var(--text-2);
-  border-color: var(--border);
   cursor: pointer;
 }
 button.chip.sync-chip:active,
 button.chip.sync-refresh:active { opacity: 0.55; }
+/* A failed sync is a state the user has to act on — colour it, do not hide it. */
+button.chip.sync-chip.is-error {
+  color: var(--danger);
+  border-color: var(--danger);
+}
 button.chip.sync-chip[disabled],
 button.chip.sync-refresh[disabled] { opacity: 0.55; }
-/* Same grey chip chrome as Sync — only keep button-specific resets. */
-button.chip.sync-refresh {
-  width: auto;
-  height: auto;
-  min-width: 0;
-  flex: 0 0 auto;
-  white-space: nowrap;
-  color: var(--text-2);
-  border-color: var(--border);
-}
 button.chip.sync-refresh svg { width: 14px; height: 14px; }
 button.chip.sync-refresh.is-spinning svg { animation: sync-spin 1s linear infinite; }
 
@@ -2424,26 +2432,8 @@ button.chip.sync-refresh.is-spinning svg { animation: sync-spin 1s linear infini
   border: 1px solid rgba(255, 179, 0, 0.3);
 }
 
-/* ── Sync chip (More topbar, top-right) ── */
+/* ── Sync chip icon ── */
 
-.sync-chip {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  padding: 4px 10px;
-  margin-bottom: 4px;
-  font-size: 11px;
-  font-weight: 600;
-  color: var(--text-3);
-  background: var(--surface-2);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-pill);
-  cursor: pointer;
-  white-space: nowrap;
-  transition: opacity 0.15s ease;
-}
-.sync-chip:active { opacity: 0.6; }
-.sync-chip[disabled] { opacity: 0.6; }
 .sync-chip-icon {
   display: inline-flex;
   width: 12px;
@@ -2458,4 +2448,59 @@ button.chip.sync-refresh.is-spinning svg { animation: sync-spin 1s linear infini
 
 @media (prefers-reduced-motion: reduce) {
   .sync-chip-icon.is-spinning svg { animation: none; }
+}
+
+/* ═══════════════ Synced from legacy styles.css (search + trash + chart-head) ═══════════════
+   The legacy app gained keyword search, the Trash, and the tap-to-read chart value
+   after the phase-1 CSS copy. Appended here so the two stylesheets stay in lockstep.
+   ══════════════════════════════════════════════════════════════════════════════════════════ */
+
+/* Tap-to-read value, pinned to the chart head's right edge. */
+.chart-head-value {
+  margin-left: auto;
+  flex: 0 0 auto;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-2);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+/* ───────────────────────── Search modal ───────────────────────── */
+
+.search-input { width: 100%; }
+.search-meta {
+  font-size: 12px;
+  color: var(--text-3);
+  margin: 10px 2px 6px;
+}
+.search-results { display: flex; flex-direction: column; }
+.sr-main {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+.sr-title {
+  font-size: 15px;
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.sr-meta {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-3);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* ───────────────────────── Trash ───────────────────────── */
+
+.trash-row { cursor: default; }
+.trash-restore-btn:hover {
+  background: var(--surface-2);
+  color: var(--text);
 }

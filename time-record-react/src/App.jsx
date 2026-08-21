@@ -31,7 +31,8 @@ export default function App() {
     createEvent, updateEvent, removeEvent, removeMany,
     saveCategories, clearAll, applyLanguage,
     theme, applyTheme,
-    lastCloudSync, syncOn, syncBusy, setSyncOn, setLastCloudSync, runCloudSync,
+    lastCloudSync, syncOn, syncBusy, syncError, setSyncError, autoSync,
+    setSyncOn, setLastCloudSync, runCloudSync,
     refreshEvents, refreshCategories,
   } = useAppData();
 
@@ -104,7 +105,10 @@ export default function App() {
     if (next === 'insights' && tab === 'insights') analytics.reset();
     setTab(next);
     window.scrollTo({ top: 0 });
-  }, [tab, analytics]);
+    // The board is read-only: whatever the Shortcut wrote lives upstream, so
+    // opening a data tab is exactly when we want a fresh pull.
+    if (next === 'today' || next === 'calendar' || next === 'insights') autoSync();
+  }, [tab, analytics, autoSync]);
 
   const refreshAfterImport = useCallback(async () => {
     await refreshEvents();
@@ -128,7 +132,8 @@ export default function App() {
           lastCloudSync={lastCloudSync}
           syncOn={syncOn}
           syncBusy={syncBusy}
-          onSync={runCloudSync}
+          syncError={syncError}
+          onSync={() => runCloudSync()}
         />
       ) : null}
 
@@ -140,7 +145,8 @@ export default function App() {
           lastCloudSync={lastCloudSync}
           syncOn={syncOn}
           syncBusy={syncBusy}
-          onSync={runCloudSync}
+          syncError={syncError}
+          onSync={() => runCloudSync()}
         />
       ) : null}
 
@@ -164,7 +170,8 @@ export default function App() {
             lastCloudSync={lastCloudSync}
             syncOn={syncOn}
             syncBusy={syncBusy}
-            onSync={runCloudSync}
+            syncError={syncError}
+            onSync={() => runCloudSync()}
           />
         </Suspense>
       ) : null}
@@ -178,7 +185,8 @@ export default function App() {
           lastCloudSync={lastCloudSync}
           syncOn={syncOn}
           syncBusy={syncBusy}
-          onSync={runCloudSync}
+          syncError={syncError}
+          onSync={() => runCloudSync()}
           onSyncSaved={() => setSyncOn(true)}
           onSyncDisconnected={() => { setSyncOn(false); setLastCloudSync(null); }}
           onSaveCategories={saveCategories}

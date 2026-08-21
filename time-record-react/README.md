@@ -34,7 +34,6 @@ Testing on a real iPhone/iPad on the same Wi-Fi: `npm run dev` binds to
 | `calendar_categories_v1` | `[{ id, name, color }]` |
 | `calendar_settings_v1` | `{ "lang": "en" \| "zh" }` |
 | `calendar_events_v1_backup_<ts>` | automatic backup of a corrupted payload |
-| `calendar_deleted_v1` | `{ [eventId]: deletionTimestamp }` — deletion tombstones (Cloud Sync) |
 
 ```json
 {
@@ -75,10 +74,7 @@ Cloud Sync (optional, opt-in)
 tested without a network; `supabase-sync.js` holds the client and loads the
 SDK through a dynamic import, keeping it out of the initial bundle. The same
 logic exists in legacy `app.js` as `SyncService`, and `verify-sync.mjs` checks
-the two agree row-for-row. Deletions travel as **tombstones** (see below), so
-`mergeEvents` takes the local tombstone map as a third argument and returns
-the deletion deltas (`toPullDeletes` / `tombAdopt` / `tombDrop`) alongside the
-classic push/pull lists.
+the two agree row-for-row.
 
 `StorageService` and `DataService` were copied over verbatim, including the
 localStorage probe, the in-memory fallback for sandboxed previews, and the
@@ -276,36 +272,23 @@ the markup. Verified across single-segment, dominant-plus-sliver, five-slivers,
 all-equal and ten-segment datasets: gaps stay within 2.92–3.12px and the ring
 holds a uniform 24.40px throughout.
 
-### New: delete sample data without hunting events — and make it stick on every device
+### New: delete sample data without hunting events
 
-Two features, one pain: a freshly synced device seeds demo data (or carries
-over history), and getting rid of it meant deleting events one by one — and
-with sync on, a deleted event would come back from the cloud on the next sync.
+A freshly synced device seeds demo data (or carries over history), and getting
+rid of it meant deleting events one by one.
 
-**1. More → Manage by category** (`src/pages/More.jsx`). A new card lists every
-event grouped by its category (template order, unknown categories
-alphabetical, uncategorized last), each row with a delete button, and each
-group with a *delete all* action. Both asks for a confirmation dialog like
-every other destructive action in the app.
+**More → Manage by category** (`src/pages/More.jsx`). A card on the More
+screen lists every event grouped by its category (template order, unknown
+categories alphabetical, uncategorized last), each row with a delete button,
+and each group with a *delete all* action — so a whole category of sample
+data goes in one tap. Both ask for a confirmation dialog like every other
+destructive action in the app.
 
-**2. Deletions now sync, as tombstones.** `deleteEvent`/`deleteEvents` record
-the id + deletion time under `calendar_deleted_v1` (a new key; `clearAll`
-deliberately writes none, so "clear all" stays a local, explicit action).
-`syncNow` sends the winning tombstones to the server as rows with
-`deleted_at` set (live rows always upsert `deleted_at: null`, reviving the
-event), and adopts remote tombstones on the way back. The merge rule is still
-last-write-wins — just now a *write* can also be a deletion, and re-saving an
-id after deletion (a Shortcut re-import with its stable id) revives the event.
-`verify-sync.mjs` covers the matrix: local vs remote tombstones, ties,
-revivals, and the "deleted event must not come back from the cloud" case.
-
-**One-time table change:** the `events` table gains a `deleted_at text`
-column. Re-run the setup SQL once (it is idempotent:
-`alter table … add column if not exists`). Until then, sync surfaces
-`syncErrNoColumn` — "run the setup SQL again". Implemented identically in
-legacy `app.js` (`SyncService`), since both front-ends share the table — an
-older client that would otherwise read a tombstone row as a junk "Untitled"
-event now understands it.
+Deletion semantics note: the React build deletes directly (no Trash), while
+the legacy build moves deletions into its 2-day Trash and erases the cloud
+copy at sync. The manage card uses the same `DataService.remove` / new
+`DataService.removeMany` the rest of the React app uses, so it behaves like
+the existing delete everywhere.
 
 ---
 

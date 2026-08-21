@@ -21,9 +21,7 @@ export function CalendarPage({
   onAddEvent,
   onEditEvent,
   lastCloudSync,
-  syncOn,
-  syncBusy,
-  onSync,
+  syncOn, syncBusy, syncError, onSync,
 }) {
   const [pickerOpen, setPickerOpen] = useState(false);
 
@@ -41,7 +39,13 @@ export function CalendarPage({
       <header className="topbar">
         <h1 className="page-title">{t('calendar')}</h1>
         <div className="topbar-end">
-          <SyncActions lastCloudSync={lastCloudSync} syncOn={syncOn} syncBusy={syncBusy} onSync={onSync} />
+          <SyncActions
+            lastCloudSync={lastCloudSync}
+            syncOn={syncOn}
+            syncBusy={syncBusy}
+            syncError={syncError}
+            onSync={onSync}
+          />
         </div>
       </header>
 

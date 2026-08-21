@@ -10,7 +10,7 @@
    ============================================================ */
 
 import {
-  SYNC_KEY, SYNC_TABLE, fromRow, mergeEvents, normalizeConfig, toRow, toTombstoneRow, validateConfig,
+  SYNC_KEY, SYNC_TABLE, fromRow, mergeEvents, normalizeConfig, toRow, validateConfig,
 } from './sync-core.js';
 
 /* ── Credential storage ──────────────────────────────────────
@@ -126,24 +126,37 @@ export function resetClient() {
  * can explain the *cause* instead of echoing a raw driver string.
  */
 export function classifyError(err) {
-  const msg = String(err?.message || err || '');
-  const code = err?.code || '';
+  const status = err?.status || err?.statusCode || 0;
+  const msg = String(err?.message || err?.details || err || '');
+  const code = String(err?.code || '');
+  const blob = code + ' ' + msg;
+  if (status === 401 || status === 403) {
+    return { code: 'syncErrAuth', detail: msg };
+  }
   if (/Failed to fetch|NetworkError|ERR_NAME_NOT_RESOLVED|fetch failed/i.test(msg)) {
     return { code: 'syncErrNetwork', detail: msg };
   }
-  if (code === '42P01' || /relation .* does not exist|Could not find the table/i.test(msg)) {
+  if (code === '42P01' || code === 'PGRST205' || /relation .* does not exist|Could not find the table|schema cache/i.test(blob)) {
     return { code: 'syncErrNoTable', detail: msg };
-  }
-  if (code === '42703' || /column .* does not exist/i.test(msg)) {
-    return { code: 'syncErrNoColumn', detail: msg };
   }
   if (code === '42501' || /row-level security|permission denied/i.test(msg)) {
     return { code: 'syncErrRls', detail: msg };
   }
-  if (/Invalid API key|JWT|apikey/i.test(msg)) {
+  if (/Invalid API key|JWT|JWS|apikey/i.test(blob)) {
     return { code: 'syncErrAuth', detail: msg };
   }
   return { code: 'syncErrUnknown', detail: msg };
+}
+
+export function syncFailText(res, translate) {
+  const tr = translate || ((k) => k);
+  const key = res && res.code ? res.code : 'syncErrUnknown';
+  const base = tr(key);
+  if (key !== 'syncErrUnknown') return base;
+  const detail = String((res && res.detail) || '').replace(/\s+/g, ' ').trim();
+  if (!detail) return base;
+  const clip = detail.length > 140 ? detail.slice(0, 137) + '…' : detail;
+  return `${base} — ${clip}`;
 }
 
 /**
@@ -172,14 +185,11 @@ export async function testConnection(rawConfig) {
 /**
  * Two-way sync.
  *
- * Reads the remote rows, merges by last-write-wins (deletions as tombstones),
- * upserts what the server is missing — live rows and tombstone rows alike —
- * and hands the merged list back. Writing to local storage is the caller's
- * job: `toPullDeletes` lists local events a remote tombstone removed, and
- * `tombAdopt` / `tombDrop` update the local tombstone map. This function
- * stays free of persistence so it can be tested.
+ * Reads the remote rows, merges by last-write-wins, upserts what the server is
+ * missing, and hands the merged list back. Writing to local storage is the
+ * caller's job — this function stays free of persistence so it can be tested.
  */
-export async function syncNow(localEvents, rawConfig, localTombstones = null) {
+export async function syncNow(localEvents, rawConfig) {
   const cfg = rawConfig || loadConfig();
   const { ok, errors, config } = validateConfig(cfg || {});
   if (!ok) return { ok: false, code: Object.values(errors)[0], detail: '' };
@@ -194,14 +204,10 @@ export async function syncNow(localEvents, rawConfig, localTombstones = null) {
     if (error) throw error;
 
     const remote = (data || []).map(fromRow);
-    const { merged, toPush, toPull, toPullDeletes, tombAdopt, tombDrop } =
-      mergeEvents(localEvents, remote, localTombstones);
+    const { merged, toPush, toPull } = mergeEvents(localEvents, remote);
 
     if (toPush.length) {
-      const rows = toPush.map((item) =>
-        item.tombstone
-          ? toTombstoneRow(item.id, config.userKey, item.deletedAt)
-          : toRow(item, config.userKey));
+      const rows = toPush.map((ev) => toRow(ev, config.userKey));
       const { error: upsertError } = await supabase
         .from(SYNC_TABLE)
         .upsert(rows, { onConflict: 'id' });
@@ -212,10 +218,7 @@ export async function syncNow(localEvents, rawConfig, localTombstones = null) {
       ok: true,
       merged,
       pushed: toPush.length,
-      pulled: toPull.length + toPullDeletes.length,
-      toPullDeletes,
-      tombAdopt,
-      tombDrop,
+      pulled: toPull.length,
       remoteTotal: remote.length,
       syncedAt: new Date().toISOString(),
     };
@@ -249,20 +252,15 @@ create table if not exists public.events (
   color       text default 'blue',
   note        text default '',
   created_at  text,
-  updated_at  text,
-  deleted_at  text
+  updated_at  text
 );
-
--- Deleting an event keeps its row and stamps deleted_at (a "tombstone"),
--- so the deletion syncs to your other devices instead of coming back.
--- Existing tables need this line too — re-running this script is safe.
-alter table public.events add column if not exists deleted_at text;
 
 create index if not exists events_user_key_idx
   on public.events (user_key);
 
 alter table public.events enable row level security;
 
+drop policy if exists "anon full access" on public.events;
 create policy "anon full access" on public.events
   for all to anon
   using (true)
