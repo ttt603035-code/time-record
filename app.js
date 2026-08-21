@@ -3766,7 +3766,7 @@ function trendSVG(labels, values, opts) {
     const area = path + 'L' + pts[pts.length - 1][0].toFixed(1) + ' ' + base + ' L' + pts[0][0].toFixed(1) + ' ' + base + ' Z';
     marks = '<path d="' + area + '" fill="' + hexToRgba(color, 0.10) + '"/>'
       + '<path d="' + path + '" fill="none" stroke="' + color + '" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>'
-      + pts.map((p) => '<circle cx="' + p[0].toFixed(1) + '" cy="' + p[1].toFixed(1) + '" r="1.8" fill="' + color + '"/>').join('');
+      + pts.map((p, i) => '<circle data-m="' + i + '" cx="' + p[0].toFixed(1) + '" cy="' + p[1].toFixed(1) + '" r="1.8" fill="' + color + '"/>').join('');
     const hw = Math.max(step, 18) / 2;
     hits = pts.map((p, i) => {
       const x1 = Math.max(padL, p[0] - hw);
@@ -3778,7 +3778,7 @@ function trendSVG(labels, values, opts) {
       const h = v === 0 ? 0 : Math.max(3, (v / max) * innerH);
       const x = padL + i * step + (step - bw) / 2;
       const y = padT + innerH - h;
-      marks += '<rect x="' + x.toFixed(1) + '" y="' + y.toFixed(1) + '" width="' + bw.toFixed(1) + '" height="' + h.toFixed(1) + '" rx="' + Math.min(3, bw / 2).toFixed(1) + '" fill="' + color + '"/>';
+      marks += '<rect data-m="' + i + '" x="' + x.toFixed(1) + '" y="' + y.toFixed(1) + '" width="' + bw.toFixed(1) + '" height="' + h.toFixed(1) + '" rx="' + Math.min(3, bw / 2).toFixed(1) + '" fill="' + color + '"/>';
       hits += '<rect data-i="' + i + '" x="' + (x - (step - bw) / 2).toFixed(1) + '" y="' + padT + '" width="' + step.toFixed(1) + '" height="' + innerH + '" fill="transparent"/>';
       if (labels[i]) labelsOut += '<text x="' + (x + bw / 2).toFixed(1) + '" y="' + (H - 6) + '" font-size="9" fill="#86868B" text-anchor="middle">' + labels[i] + '</text>';
     });
@@ -4106,11 +4106,38 @@ function trendCard(shownEvents, color, nameLabel) {
   title.appendChild(document.createTextNode(t('trend')));
   if (nameLabel) title.appendChild(el('span', 'chart-head-sub', nameLabel));
   head.appendChild(title);
+  // Top-right readout: tap a bar/point below and its date + time appears
+  // here. (This is the tap-to-read value — NOT the removed axis label.)
+  const valueEl = el('span', 'chart-head-value');
+  head.appendChild(valueEl);
   c.appendChild(head);
   if (!shownEvents.length) { c.appendChild(chartEmpty()); return c; }
   const tr = buildTrend(shownEvents);
   if (tr.values.every((v) => v === 0)) { c.appendChild(chartEmpty()); return c; }
-  c.appendChild(trendSVG(tr.labels, tr.values, { type: tr.kind, color }));
+  const host = trendSVG(tr.labels, tr.values, { type: tr.kind, color });
+
+  let selected = -1;
+  function setActive(i) {
+    host.querySelectorAll('[data-m]').forEach((m) => {
+      m.style.opacity = (i < 0 || Number(m.getAttribute('data-m')) === i) ? '1' : '0.35';
+    });
+  }
+  host.addEventListener('click', (ev) => {
+    const hit = ev.target.closest ? ev.target.closest('[data-i]') : null;
+    if (!hit) return;
+    const i = Number(hit.getAttribute('data-i'));
+    if (i === selected) {
+      selected = -1;
+      valueEl.textContent = '';
+      setActive(-1);
+      return;
+    }
+    selected = i;
+    valueEl.textContent = tr.pickLabel(i) + ' · ' + fmtTimeShort(tr.values[i]);
+    setActive(i);
+  });
+
+  c.appendChild(host);
   return c;
 }
 

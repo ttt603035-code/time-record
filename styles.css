@@ -1517,6 +1517,16 @@ textarea.text-input { resize: none; line-height: 1.45; }
   border-radius: 50%;
   flex: 0 0 auto;
 }
+/* Tap-to-read value, pinned to the chart head's right edge. */
+.chart-head-value {
+  margin-left: auto;
+  flex: 0 0 auto;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-2);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
 .chart-head-sub {
   font-weight: 600;
   color: var(--text);
