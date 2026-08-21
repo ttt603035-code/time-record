@@ -1194,6 +1194,26 @@ const SyncService = (() => {
       const { merged, toPush, toPull } = mergeEvents(localEvents, remote);
       const catRes = mergeCategories(localCats, remoteCats);
 
+      // Colour unification at the sync boundary: the template's colour is
+      // authoritative for its category. This covers events a Shortcut wrote
+      // straight into Supabase with its own colour mapping — the Shortcut
+      // does not need to know about template edits at all. Recoloured
+      // events get a fresh stamp and are pushed, so the cloud row is
+      // corrected too and every device converges.
+      const catByName = new Map(catRes.merged.map((c) => [c.name.toLowerCase(), c]));
+      const pushIdx = new Map(toPush.map((ev, i) => [ev.id, i]));
+      const nowIso = new Date().toISOString();
+      let recolored = 0;
+      const unified = merged.map((ev) => {
+        const cat = catByName.get((ev.category || '').toLowerCase());
+        if (!cat || ev.color === cat.color) return ev;
+        const fixed = Object.assign({}, ev, { color: cat.color, updatedAt: nowIso });
+        recolored++;
+        if (pushIdx.has(ev.id)) toPush[pushIdx.get(ev.id)] = fixed;
+        else { pushIdx.set(ev.id, toPush.length); toPush.push(fixed); }
+        return fixed;
+      });
+
       const rows = toPush.map((ev) => toRow(ev, config.userKey))
         .concat(catRes.toPush.map((cat) => categoryToRow(cat, config.userKey)));
       if (rows.length) {
@@ -1205,9 +1225,10 @@ const SyncService = (() => {
 
       return {
         ok: true,
-        merged,
+        merged: unified,
         pushed: toPush.length,
         pulled: toPull.length,
+        recolored: recolored,
         deleted: deadRemote.length,
         mergedCategories: catRes.merged,
         pushedCats: catRes.toPush.length,
@@ -2410,7 +2431,7 @@ async function runSync() {
       tplTrashIds: tplTrashIds,
     });
     if (!res.ok) { toast(t(res.code)); return; }
-    if (res.pulled > 0) {
+    if (res.pulled > 0 || res.recolored > 0) {
       await DataService.importAll(res.merged);
       await refreshEvents();
     }
