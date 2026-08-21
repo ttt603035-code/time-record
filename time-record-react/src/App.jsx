@@ -28,7 +28,7 @@ const InsightsPage = lazy(() =>
 export default function App() {
   const {
     events, categories, lang,
-    createEvent, updateEvent, removeEvent,
+    createEvent, updateEvent, removeEvent, removeMany,
     saveCategories, clearAll, applyLanguage,
     theme, applyTheme,
     lastCloudSync, syncOn, syncBusy, syncError, setSyncError, autoSync,
@@ -194,6 +194,8 @@ export default function App() {
           onApplyLanguage={applyLanguage}
           onApplyTheme={applyTheme}
           onImported={refreshAfterImport}
+          onDeleteEvent={removeEvent}
+          onDeleteMany={removeMany}
         />
       ) : null}
 

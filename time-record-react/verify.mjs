@@ -143,6 +143,7 @@ check('Storage key calendar_events_v1 used', !!rawEvents);
 const parsed = JSON.parse(rawEvents);
 check('Envelope { version: 1, events: [...] }',
   parsed.version === 1 && Array.isArray(parsed.events), `${parsed.events.length} events`);
+const DEMO_COUNT = parsed.events.length; // the one-time demo seed, for relative counts later
 
 const SCHEMA = ['id', 'date', 'startTime', 'endTime', 'title', 'category', 'color', 'note', 'createdAt', 'updatedAt'];
 const sample = parsed.events[0];
@@ -301,22 +302,54 @@ await tick(500);
 check('More screen mounts', !!$(doc, '#screen-more'));
 // Phase 2: the More screen is React + shadcn (Card / Separator / Collapsible),
 // so structure is identified by data-slot rather than legacy class names.
-check('Data / Cloud Sync / Appearance / Language / About cards',
-  $$(doc, '[data-slot="card"]').length === 5,
+check('Data / Manage / Cloud Sync / Appearance / Language / About cards',
+  $$(doc, '[data-slot="card"]').length === 6,
   `${$$(doc, '[data-slot="card"]').length} cards`);
 check('Data stat tiles', $$(doc, '[data-slot="card-content"] .grid-cols-3 > div').length === 3);
 const dataActions = $$(doc, '[data-slot="card-content"] [data-slot="button"]');
 check('Export / Import / Clear buttons', dataActions.length >= 3,
   dataActions.slice(0, 3).map((b) => b.textContent.trim()).join(', '));
 
+// The manage-by-category card: the demo data must be grouped by its six
+// categories, the first group open, every row carrying a delete button and
+// every group a delete-all action.
+check('Manage card present', !!$(doc, '#manageDataCard'));
+check('Manage card groups the demo data by category',
+  $$(doc, '#manageDataCard [data-slot="collapsible-trigger"]').length === 6,
+  `${$$(doc, '#manageDataCard [data-slot="collapsible-trigger"]').length} groups`);
+const manageRows = () => $$(doc, '#manageDataCard [data-slot="collapsible-content"] .manage-row');
+check('First category group is open with rows', manageRows().length > 0, `${manageRows().length} rows`);
+check('Every manage row has a delete button',
+  manageRows().every((r) => r.querySelector('button[aria-label^="Delete"]')),
+  `${manageRows().length} rows`);
+check('Every manage group has a delete-all action',
+  $$(doc, '#manageDataCard button[aria-label^="Delete all"]').length === 6,
+  `${$$(doc, '#manageDataCard button[aria-label^="Delete all"]').length} actions`);
+
+// Delete one event from the list: confirmation dialog, then the event is
+// gone from storage and the open group re-renders without it.
+const rowsBeforeDelete = manageRows().length;
+const firstRow = manageRows()[0];
+clickEl(window, firstRow.querySelector('button[aria-label^="Delete"]'));
+await tick(450);
+check('Row delete asks for confirmation',
+  $$(doc, '[data-slot="alert-dialog-content"]').length === 1);
+clickEl(window, $(doc, '.dialog-actions button.is-danger'));
+await tick(700);
+const afterManageDelete = JSON.parse(window.localStorage.getItem('calendar_events_v1')).events;
+check('Event deleted from storage via the manage list',
+  afterManageDelete.length === DEMO_COUNT - 1, `${DEMO_COUNT} → ${afterManageDelete.length}`);
+check('Manage list re-renders after the delete',
+  manageRows().length === rowsBeforeDelete - 1, `${rowsBeforeDelete} → ${manageRows().length}`);
+
 // The storage-key table now lives in a Collapsible, so it is only in the DOM
 // once expanded — open it before asserting.
-const keysTrigger = $(doc, '[data-slot="collapsible-trigger"]');
+const keysTrigger = $(doc, '#storageKeys [data-slot="collapsible-trigger"]');
 check('Storage keys collapsible present', !!keysTrigger);
 clickEl(window, keysTrigger);
 await tick(400);
-const keyRows = $$(doc, '[data-slot="collapsible-content"] .grid-cols-\\[minmax\\(0\\2c 1fr\\)_60px_64px\\]');
-const keyNames = $$(doc, '[data-slot="collapsible-content"] span.truncate').map((n) => n.textContent);
+const keyRows = $$(doc, '#storageKeys [data-slot="collapsible-content"] .grid-cols-\\[minmax\\(0\\2c 1fr\\)_60px_64px\\]');
+const keyNames = $$(doc, '#storageKeys [data-slot="collapsible-content"] span.truncate').map((n) => n.textContent);
 check('Storage keys table lists the three keys', keyNames.length >= 3,
   `${keyNames.length} rows`);
 check('Storage key names unchanged',

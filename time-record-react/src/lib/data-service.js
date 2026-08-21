@@ -12,6 +12,7 @@ export const DataService = {
   create: (event) => StorageService.addEvent(event),
   update: (event) => StorageService.updateEvent(event),
   remove: (id) => StorageService.deleteEvent(id),
+  removeMany: (ids) => StorageService.deleteEvents(ids),
   importAll: (data) => StorageService.importEvents(data),
   exportAll: () => StorageService.exportEvents(),
   clear: () => StorageService.clearAll(),

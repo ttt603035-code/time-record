@@ -101,6 +101,14 @@ export const StorageService = (() => {
     return true;
   }
 
+  /** Bulk delete — used by More → Manage by category ("delete all"). */
+  async function deleteEvents(ids) {
+    const set = new Set(ids);
+    const events = await getEvents();
+    await saveEvents(events.filter((x) => !set.has(x.id)));
+    return true;
+  }
+
   async function importEvents(data) {
     const events = await getEvents();
     const incoming = normalizeImport(data);
@@ -201,6 +209,7 @@ export const StorageService = (() => {
     addEvent,
     updateEvent,
     deleteEvent,
+    deleteEvents,
     importEvents,
     exportEvents,
     clearAll,
