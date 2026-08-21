@@ -518,7 +518,7 @@ textarea:focus-visible,
 
 .settings-head { margin-bottom: 12px; }
 .settings-title { font-size: 15px; font-weight: 700; letter-spacing: -0.01em; }
-.settings-desc { font-size: 12px; color: var(--text-3); line-height: 1.5; margin-top: 3px; }
+.settings-desc { font-size: 12px; color: var(--text-3); line-height: 1.5; margin-top: 3px; white-space: pre-line; }
 
 .stat-row { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; margin-bottom: 12px; }
 .stat-tile {
@@ -2003,30 +2003,38 @@ textarea.text-input { resize: none; line-height: 1.45; }
   white-space: nowrap;
 }
 .sync-chip { font-variant-numeric: tabular-nums; }
-button.chip.sync-chip {
+button.chip.sync-chip,
+button.chip.sync-refresh {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  height: 30px;
+  min-height: 30px;
+  margin: 0;
+  padding: 0 12px;
+  font-size: 12.5px;
+  font-weight: 600;
+  line-height: 1;
+  color: var(--text-2);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-pill);
   width: auto;
-  height: auto;
   min-width: 0;
   flex: 0 0 auto;
   white-space: nowrap;
-  color: var(--text-2);
-  border-color: var(--border);
   cursor: pointer;
 }
 button.chip.sync-chip:active,
 button.chip.sync-refresh:active { opacity: 0.55; }
+/* A failed sync is a state the user has to act on — colour it, do not hide it. */
+button.chip.sync-chip.is-error {
+  color: var(--danger);
+  border-color: var(--danger);
+}
 button.chip.sync-chip[disabled],
 button.chip.sync-refresh[disabled] { opacity: 0.55; }
-/* Same grey chip chrome as Sync — only keep button-specific resets. */
-button.chip.sync-refresh {
-  width: auto;
-  height: auto;
-  min-width: 0;
-  flex: 0 0 auto;
-  white-space: nowrap;
-  color: var(--text-2);
-  border-color: var(--border);
-}
 button.chip.sync-refresh svg { width: 14px; height: 14px; }
 button.chip.sync-refresh.is-spinning svg { animation: sync-spin 1s linear infinite; }
 
@@ -2362,27 +2370,8 @@ button.chip.search-chip:active { opacity: 0.55; }
   border: 1px solid rgba(255, 179, 0, 0.3);
 }
 
-/* ── Sync chip (More topbar, top-right) ── */
+/* ── Sync chip icon ── */
 
-.sync-chip {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  padding: 0 10px;
-  margin: 0;
-  height: 30px;
-  font-size: 12px;
-  font-weight: 600;
-  color: var(--text-2);
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-pill);
-  cursor: pointer;
-  white-space: nowrap;
-  transition: opacity 0.15s ease;
-}
-.sync-chip:active { opacity: 0.6; }
-.sync-chip[disabled] { opacity: 0.6; }
 .sync-chip-icon {
   display: inline-flex;
   width: 12px;

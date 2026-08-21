@@ -107,7 +107,7 @@ function formatExportLabel(iso) {
 }
 
 export function MorePage({
-  events, categories, lang, theme, lastCloudSync, syncOn, syncBusy, onSync,
+  events, categories, lang, theme, lastCloudSync, syncOn, syncBusy, syncError, onSync,
   onSyncSaved, onSyncDisconnected, onSaveCategories, onClearAll, onApplyLanguage,
   onApplyTheme, onImported,
 }) {
@@ -246,6 +246,7 @@ export function MorePage({
             lastCloudSync={lastCloudSync}
             syncOn={syncOn}
             syncBusy={syncBusy}
+            syncError={syncError}
             onSync={onSync}
             hideWhenOff
           />
@@ -358,15 +359,17 @@ export function MorePage({
                 {syncOn ? t('syncOn') : t('syncOff')}
               </span>
             </CardTitle>
-            <CardDescription className="text-xs leading-relaxed">
-              {syncOn
-                ? t('syncLast', {
+            <CardDescription className="text-xs leading-relaxed whitespace-pre-line">
+              {/* A failed sync must say WHY — the reason is the only thing that
+                  tells the user whether to fix the URL, the key or the table. */}
+              {!syncOn ? t('syncDesc') : (syncError
+                ? `${t(syncError.code)}${syncError.detail ? `\n${t('syncErrDetail', { s: syncError.detail })}` : ''}`
+                : t('syncLast', {
                   s: (() => {
                     const { key, vars, literal } = formatSyncTime(lastCloudSync);
                     return literal ?? t(key, vars || undefined);
                   })(),
-                })
-                : t('syncDesc')}
+                }))}
             </CardDescription>
           </CardHeader>
           <CardContent className="flex flex-wrap gap-2 px-4">

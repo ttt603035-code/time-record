@@ -157,6 +157,10 @@ const I18N = {
     syncErrRls: 'Blocked by row-level security — check the table policy',
     syncErrAuth: 'The anon key was rejected',
     syncErrUnknown: 'Sync failed',
+    syncErrDetail: 'Details: %s',
+    syncChipFailed: 'failed',
+    syncAutoFailed: 'Cloud sync failed — %s',
+    syncPulled: 'Pulled %n new records from the cloud',
     lastExportNever: 'Not exported yet',
     lastExport: 'Last exported %s',
     pickColor: 'More colours',
@@ -183,7 +187,7 @@ const I18N = {
     segDay: 'Day', segWeek: 'Week', segMonth: 'Month', segYear: 'Year',
     importGuide: 'Import from Shortcuts',
     importGuideDesc: 'Have your Shortcut build this JSON, save it as a file, then tap Import.',
-    importGuideNote: 'Later, a backend (Supabase) will let the Shortcut send events automatically — the data layer is already ready for it.',
+    importGuideNote: 'Or let the Shortcut POST each finished record straight to your Supabase events table — see docs/shortcuts-step-by-step.md for the exact URL, headers and JSON.',
     dayBlocks: 'Time Blocks', noData: 'No data for this period',
     totalTime: 'Total Time', timeDistribution: 'Time Distribution', trend: 'Trend', history: 'History',
     sessionsTile: 'Sessions', avgSession: 'Average Session', avgShort: 'avg',
@@ -256,6 +260,10 @@ const I18N = {
     syncErrRls: '被行级安全策略拦截 — 请检查表的 policy',
     syncErrAuth: 'Anon key 被拒绝',
     syncErrUnknown: '同步失败',
+    syncErrDetail: '详情：%s',
+    syncChipFailed: '失败',
+    syncAutoFailed: '云同步失败 — %s',
+    syncPulled: '已从云端拉取 %n 条新记录',
     lastExportNever: '尚未导出',
     lastExport: '上次导出 %s',
     pickColor: '更多颜色',
@@ -282,7 +290,7 @@ const I18N = {
     segDay: '日', segWeek: '周', segMonth: '月', segYear: '年',
     importGuide: '从快捷指令导入',
     importGuideDesc: '让快捷指令生成如下 JSON，保存为文件后点击「导入」。',
-    importGuideNote: '后续接入 Supabase 后端后，快捷指令即可自动写入日程 — 数据层已为此做好准备。',
+    importGuideNote: '也可以让快捷指令在「结束 / 补录」后直接 POST 到你的 Supabase events 表 — URL、Header、JSON 见 docs/shortcuts-step-by-step.md。',
     dayBlocks: '时间块', noData: '该时段暂无数据',
     totalTime: '总时长', timeDistribution: '时间分布', trend: '趋势', history: '历史记录',
     sessionsTile: '次数', avgSession: '平均时长', avgShort: '平均',
@@ -901,14 +909,12 @@ const DataService = {
    last-write-wins rule, so the two front-ends can sync with each
    other through the same project.
 
-   The SDK is loaded from a CDN on first use only. This build has
-   no bundler, and a user who never opens the sync sheet should
-   never pay for the download.
+   The Pages build has no bundler, so this talks to PostgREST
+   with fetch instead of loading the Supabase JS SDK from a CDN.
    ============================================================ */
 
 const SYNC_KEY = 'calendar_sync_v1';
 const SYNC_TABLE = 'events';
-const SUPABASE_CDN = 'https://esm.sh/@supabase/supabase-js@2';
 
 const SyncService = (() => {
   function ls() {
@@ -922,19 +928,37 @@ const SyncService = (() => {
     }
   }
 
+  function stripWrap(s) {
+    return String(s || '').trim().replace(/^['"]+|['"]+$/g, '').trim();
+  }
+
   function normalizeConfig(cfg) {
-    return {
-      url: typeof cfg?.url === 'string' ? cfg.url.trim().replace(/\/+$/, '') : '',
-      anonKey: typeof cfg?.anonKey === 'string' ? cfg.anonKey.trim() : '',
-      userKey: typeof cfg?.userKey === 'string' ? cfg.userKey.trim() : '',
-    };
+    let url = typeof cfg?.url === 'string' ? stripWrap(cfg.url) : '';
+    let anonKey = typeof cfg?.anonKey === 'string' ? stripWrap(cfg.anonKey) : '';
+    const userKey = typeof cfg?.userKey === 'string' ? stripWrap(cfg.userKey) : '';
+    if (/^https:\/\//i.test(url)) {
+      try { url = new URL(url).origin; } catch (err) { /* keep trimmed */ }
+    } else {
+      url = url.replace(/\/+$/, '');
+    }
+    anonKey = anonKey.replace(/^Bearer\s+/i, '').trim();
+    return { url, anonKey, userKey };
   }
 
   function validateConfig(cfg) {
     const c = normalizeConfig(cfg);
     const errors = {};
     if (!c.url) errors.url = 'syncErrUrlEmpty';
-    else if (!/^https:\/\/[^\s/]+\.[^\s/]+/.test(c.url)) errors.url = 'syncErrUrlShape';
+    else {
+      try {
+        const u = new URL(c.url);
+        if (u.protocol !== 'https:') errors.url = 'syncErrUrlShape';
+        else if (/^(www\.)?supabase\.com$/i.test(u.hostname)) errors.url = 'syncErrUrlShape';
+        else if (!/^https:\/\/[^\s/]+\.[^\s/]+/.test(c.url)) errors.url = 'syncErrUrlShape';
+      } catch (err) {
+        errors.url = 'syncErrUrlShape';
+      }
+    }
     if (!c.anonKey) errors.anonKey = 'syncErrKeyEmpty';
     if (!c.userKey) errors.userKey = 'syncErrUserEmpty';
     return { ok: Object.keys(errors).length === 0, errors, config: c };
@@ -1104,50 +1128,91 @@ const SyncService = (() => {
   }
 
   function classifyError(err) {
-    const msg = String(err?.message || err || '');
-    const code = err?.code || '';
+    const status = err?.status || err?.statusCode || 0;
+    const msg = String(err?.message || err?.details || err || '');
+    const code = String(err?.code || '');
+    const blob = code + ' ' + msg;
+    if (status === 401 || status === 403) return { code: 'syncErrAuth', detail: msg };
     if (/Failed to fetch|NetworkError|ERR_NAME_NOT_RESOLVED|fetch failed/i.test(msg)) {
       return { code: 'syncErrNetwork', detail: msg };
     }
-    if (code === '42P01' || /relation .* does not exist|Could not find the table/i.test(msg)) {
+    if (code === '42P01' || code === 'PGRST205' || /relation .* does not exist|Could not find the table|schema cache/i.test(blob)) {
       return { code: 'syncErrNoTable', detail: msg };
     }
     if (code === '42501' || /row-level security|permission denied/i.test(msg)) {
       return { code: 'syncErrRls', detail: msg };
     }
-    if (/Invalid API key|JWT|apikey/i.test(msg)) return { code: 'syncErrAuth', detail: msg };
+    if (/Invalid API key|JWT|JWS|apikey/i.test(blob)) return { code: 'syncErrAuth', detail: msg };
     return { code: 'syncErrUnknown', detail: msg };
   }
 
-  let clientPromise = null;
-  let clientFor = '';
-
-  async function getClient(cfg) {
-    const fingerprint = cfg.url + '::' + cfg.anonKey;
-    if (clientPromise && clientFor === fingerprint) return clientPromise;
-    clientFor = fingerprint;
-    clientPromise = (async () => {
-      const mod = await import(SUPABASE_CDN);
-      return mod.createClient(cfg.url, cfg.anonKey, {
-        auth: { persistSession: false, autoRefreshToken: false },
-      });
-    })();
-    return clientPromise;
+  function syncFailText(res) {
+    const key = res && res.code ? res.code : 'syncErrUnknown';
+    const base = t(key);
+    if (key !== 'syncErrUnknown') return base;
+    const detail = String(res && res.detail || '').replace(/\s+/g, ' ').trim();
+    if (!detail) return base;
+    const clip = detail.length > 140 ? detail.slice(0, 137) + '…' : detail;
+    return base + ' — ' + clip;
   }
 
-  function resetClient() { clientPromise = null; clientFor = ''; }
+  /* ── PostgREST plumbing (fetch, no SDK) ── */
+
+  function restHeaders(cfg, extra) {
+    return Object.assign({
+      apikey: cfg.anonKey,
+      Authorization: 'Bearer ' + cfg.anonKey,
+      Accept: 'application/json',
+      'Content-Type': 'application/json',
+    }, extra || {});
+  }
+
+  async function restJson(res) {
+    const text = await res.text();
+    if (!text) return null;
+    try { return JSON.parse(text); } catch (err) { return { message: text }; }
+  }
+
+  async function restThrowIfBad(res, body) {
+    if (res.ok) return;
+    const first = Array.isArray(body) ? body[0] : body;
+    const err = new Error(first && (first.message || first.error_description || first.error) || ('HTTP ' + res.status));
+    err.status = res.status;
+    err.code = first && first.code;
+    err.details = first && first.details;
+    throw err;
+  }
+
+  /** DELETE rows by id for this user_key. Ids are our own safe slugs. */
+  async function restDeleteIds(config, ids) {
+    if (!ids.length) return;
+    const qs = 'user_key=eq.' + encodeURIComponent(config.userKey)
+      + '&id=in.(' + ids.map(encodeURIComponent).join(',') + ')';
+    const res = await fetch(config.url + '/rest/v1/' + SYNC_TABLE + '?' + qs, {
+      method: 'DELETE',
+      headers: restHeaders(config, { Prefer: 'return=minimal' }),
+    });
+    const body = await restJson(res);
+    await restThrowIfBad(res, body);
+  }
+
+  function resetClient() { /* REST has no memoised SDK client */ }
 
   async function testConnection(rawConfig) {
     const { ok, errors, config } = validateConfig(rawConfig);
-    if (!ok) return { ok: false, code: Object.values(errors)[0] };
+    if (!ok) return { ok: false, code: Object.values(errors)[0], detail: '' };
     try {
-      const supabase = await getClient(config);
-      const { error, count } = await supabase
-        .from(SYNC_TABLE)
-        .select('id', { count: 'exact', head: true })
-        .eq('user_key', config.userKey);
-      if (error) throw error;
-      return { ok: true, count: count || 0 };
+      const qs = 'select=id&user_key=eq.' + encodeURIComponent(config.userKey) + '&limit=0';
+      const res = await fetch(config.url + '/rest/v1/' + SYNC_TABLE + '?' + qs, {
+        method: 'GET',
+        headers: restHeaders(config, { Prefer: 'count=exact' }),
+      });
+      const body = await restJson(res);
+      await restThrowIfBad(res, body);
+      const range = res.headers.get('content-range') || '';
+      const total = range.split('/')[1];
+      const count = total && total !== '*' ? Number(total) : 0;
+      return { ok: true, count: Number.isFinite(count) ? count : 0 };
     } catch (err) {
       return { ok: false, ...classifyError(err) };
     }
@@ -1156,20 +1221,21 @@ const SyncService = (() => {
   async function syncNow(localEvents, rawConfig, opts) {
     opts = opts || {};
     const { ok, errors, config } = validateConfig(rawConfig || loadConfig() || {});
-    if (!ok) return { ok: false, code: Object.values(errors)[0] };
+    if (!ok) return { ok: false, code: Object.values(errors)[0], detail: '' };
     try {
-      const supabase = await getClient(config);
-      const { data, error } = await supabase
-        .from(SYNC_TABLE)
-        .select('*')
-        .eq('user_key', config.userKey);
-      if (error) throw error;
+      const qs = 'select=*&user_key=eq.' + encodeURIComponent(config.userKey);
+      const res = await fetch(config.url + '/rest/v1/' + SYNC_TABLE + '?' + qs, {
+        method: 'GET',
+        headers: restHeaders(config),
+      });
+      const body = await restJson(res);
+      await restThrowIfBad(res, body);
 
       const trashIds = new Set(opts.trashIds || []);
       const tplTrashIds = new Set(opts.tplTrashIds || []);
       const localCats = opts.categories || [];
 
-      const allRows = data || [];
+      const allRows = Array.isArray(body) ? body : [];
       const remoteAll = allRows.filter((r) => !isTemplateRow(r)).map(fromRow);
       const remoteCatsAll = allRows.filter(isTemplateRow).map(rowToCategory);
 
@@ -1178,14 +1244,7 @@ const SyncService = (() => {
       const deadEventIds = remoteAll.filter((e) => trashIds.has(e.id)).map((e) => e.id);
       const deadTplIds = remoteCatsAll.filter((c) => tplTrashIds.has(c.id)).map((c) => TPL_ROW_PREFIX + c.id);
       const deadRemote = deadEventIds.concat(deadTplIds);
-      if (deadRemote.length) {
-        const { error: delErr } = await supabase
-          .from(SYNC_TABLE)
-          .delete()
-          .eq('user_key', config.userKey)
-          .in('id', deadRemote);
-        if (delErr) throw delErr;
-      }
+      if (deadRemote.length) await restDeleteIds(config, deadRemote);
 
       // And never pull a trashed event / deleted template back down.
       const remote = remoteAll.filter((e) => !trashIds.has(e.id));
@@ -1217,10 +1276,13 @@ const SyncService = (() => {
       const rows = toPush.map((ev) => toRow(ev, config.userKey))
         .concat(catRes.toPush.map((cat) => categoryToRow(cat, config.userKey)));
       if (rows.length) {
-        const { error: upErr } = await supabase
-          .from(SYNC_TABLE)
-          .upsert(rows, { onConflict: 'id' });
-        if (upErr) throw upErr;
+        const up = await fetch(config.url + '/rest/v1/' + SYNC_TABLE + '?on_conflict=id', {
+          method: 'POST',
+          headers: restHeaders(config, { Prefer: 'resolution=merge-duplicates,return=minimal' }),
+          body: JSON.stringify(rows),
+        });
+        const upBody = await restJson(up);
+        await restThrowIfBad(up, upBody);
       }
 
       return {
@@ -1245,13 +1307,7 @@ const SyncService = (() => {
     const { ok, config } = validateConfig(loadConfig() || {});
     if (!ok || !ids || !ids.length) return { ok: false };
     try {
-      const supabase = await getClient(config);
-      const { error } = await supabase
-        .from(SYNC_TABLE)
-        .delete()
-        .eq('user_key', config.userKey)
-        .in('id', ids);
-      if (error) throw error;
+      await restDeleteIds(config, ids);
       return { ok: true };
     } catch (err) {
       return { ok: false, ...classifyError(err) };
@@ -1285,7 +1341,7 @@ const SyncService = (() => {
 
   return {
     loadConfig, saveConfig, clearConfig, isConfigured, validateConfig,
-    toRow, fromRow, mergeEvents, mergeCategories, classifyError,
+    toRow, fromRow, mergeEvents, mergeCategories, classifyError, syncFailText,
     testConnection, syncNow, deleteRemote, resetClient,
     loadLastSync, saveLastSync, clearLastSync,
   };
@@ -1349,6 +1405,7 @@ create index if not exists events_user_key_idx
 
 alter table public.events enable row level security;
 
+drop policy if exists "anon full access" on public.events;
 create policy "anon full access" on public.events
   for all to anon
   using (true)
@@ -1363,6 +1420,14 @@ let appTheme = 'graphite';
 let lastSyncAt = Date.now();
 let syncBusy = false;
 let syncedAt = null;
+/* Auto-sync bookkeeping: last error (shown in the chip and More screen) and
+   the last attempt time, used to throttle tab-switch triggered syncs. */
+let syncErrorCode = null;
+let syncErrorDetail = '';
+let lastAutoSyncAttempt = 0;
+/* True while a background (silent) sync is running: the chip keeps showing the
+   last-synced time instead of flickering to "Syncing…" on every tab switch. */
+let syncSilent = false;
 const EXPORT_AT_KEY = 'calendar_export_at_v1';
 
 const DEFAULT_THEME = 'graphite';
@@ -2406,16 +2471,34 @@ function syncStatusLine() {
   const where = cfg ? cfg.url.replace(/^https:\/\//, '') : '';
   const at = syncedAt || SyncService.loadLastSync();
   const when = at ? t('syncLast', { s: formatSyncTime(at) }) : t('syncNever');
+  // A failed sync must say WHY, not just "failed" — the reason is the only
+  // thing that tells the user whether to fix the URL, the key or the table.
+  if (syncErrorCode) {
+    let line = where + ' · ' + t(syncErrorCode);
+    if (syncErrorDetail) line += '\n' + t('syncErrDetail', { s: syncErrorDetail });
+    return line;
+  }
   return where + ' · ' + when;
 }
 
-async function runSync() {
+/**
+ * Pull-then-push against Supabase (events + templates + tombstones).
+ *
+ * `silent` is what makes auto-sync usable: a background sync on every tab
+ * switch must not spam toasts when nothing changed, but it must still surface
+ * a failure reason (and any records that actually arrived).
+ */
+async function runSync(opts) {
+  const silent = !!(opts && opts.silent === true);
   if (!SyncService.isConfigured()) {
+    if (silent) return { ok: false, code: 'notConfigured' };
     openSyncSettings();
-    return;
+    return { ok: false, code: 'notConfigured' };
   }
-  if (syncBusy) return;
+  if (syncBusy) return { ok: false, code: 'busy' };
   syncBusy = true;
+  syncSilent = silent;
+  lastAutoSyncAttempt = Date.now();
   renderSyncChip();
   renderMoreScreen();
   try {
@@ -2430,7 +2513,15 @@ async function runSync() {
       categories: localCats,
       tplTrashIds: tplTrashIds,
     });
-    if (!res.ok) { toast(t(res.code)); return; }
+    if (!res.ok) {
+      syncErrorCode = res.code || 'syncErrUnknown';
+      syncErrorDetail = res.detail || '';
+      const msg = SyncService.syncFailText(res);
+      toast(silent ? t('syncAutoFailed', { s: msg }) : msg);
+      return res;
+    }
+    syncErrorCode = null;
+    syncErrorDetail = '';
     if (res.pulled > 0 || res.recolored > 0) {
       await DataService.importAll(res.merged);
       await refreshEvents();
@@ -2448,13 +2539,34 @@ async function runSync() {
     syncedAt = res.syncedAt;
     SyncService.saveLastSync(res.syncedAt);
     lastSyncAt = Date.parse(res.syncedAt) || Date.now();
-    toast(res.pushed || res.pulled
-      ? t('syncDone', { u: res.pushed, d: res.pulled })
-      : t('syncNoChanges'));
+    if (silent) {
+      if (res.pulled > 0) toast(t('syncPulled', { n: res.pulled }));
+    } else {
+      toast(res.pushed || res.pulled
+        ? t('syncDone', { u: res.pushed, d: res.pulled })
+        : t('syncNoChanges'));
+    }
+    return res;
   } finally {
     syncBusy = false;
+    syncSilent = false;
     refreshAll();
   }
+}
+
+/* Minimum gap between two background syncs. Short enough that a Shortcut run
+   finished seconds ago shows up when you open the app, long enough that
+   hopping between tabs is not a request storm. */
+const AUTO_SYNC_MIN_GAP_MS = 15000;
+
+/**
+ * Background sync triggered by opening the app or a data tab. Never opens the
+ * settings sheet and never blocks rendering.
+ */
+function autoSync(force) {
+  if (!SyncService.isConfigured() || syncBusy) return;
+  if (!force && Date.now() - lastAutoSyncAttempt < AUTO_SYNC_MIN_GAP_MS) return;
+  runSync({ silent: true }).catch(() => {});
 }
 
 /**
@@ -2497,7 +2609,7 @@ function syncCard() {
   const actions = el('div', 'settings-actions');
   if (on) {
     actions.appendChild(segButton(syncBusy ? t('syncing') : t('syncNow'), {
-      icon: I.sync, primary: true, onClick: runSync,
+      icon: I.sync, primary: true, onClick: () => runSync(),
     }));
     actions.appendChild(segButton(t('syncSettings'), { onClick: openSyncSettings }));
   } else {
@@ -2573,7 +2685,7 @@ function openSyncSettings() {
     setStatus(true, t('syncTesting'));
     const res = await SyncService.testConnection(config);
     if (res.ok) { setStatus(true, t('syncOkFound', { n: res.count })); return config; }
-    setStatus(false, t(res.code));
+    setStatus(false, SyncService.syncFailText(res));
     return null;
   }
 
@@ -2614,9 +2726,12 @@ function openSyncSettings() {
       if (!config) return;
       SyncService.saveConfig(config);
       SyncService.resetClient();
+      syncErrorCode = null;
+      syncErrorDetail = '';
       toast(t('syncSaved'));
       api.close();
       renderMoreScreen();
+      autoSync(true);
     },
   });
   footer.appendChild(saveBtn);
@@ -2629,6 +2744,8 @@ function openSyncSettings() {
         SyncService.resetClient();
         SyncService.clearLastSync();
         syncedAt = null;
+        syncErrorCode = null;
+        syncErrorDetail = '';
         toast(t('syncDisconnected'));
         api.close();
         renderMoreScreen();
@@ -2793,14 +2910,18 @@ function applyStaticTranslations() {
 function renderSyncChip() {
   const on = SyncService.isConfigured();
   const at = syncedAt || SyncService.loadLastSync();
-  const when = syncBusy ? t('syncing') : (on ? formatSyncTime(at) : t('syncOff'));
+  const showBusy = syncBusy && !syncSilent;
+  const when = showBusy
+    ? t('syncing')
+    : (on ? (syncErrorCode ? t('syncChipFailed') : formatSyncTime(at)) : t('syncOff'));
   const text = t('syncChip') + ' · ' + when;
   document.querySelectorAll('.sync-chip-label').forEach((node) => {
     node.textContent = text;
   });
   document.querySelectorAll('.sync-chip').forEach((node) => {
-    node.disabled = !!syncBusy;
-    node.setAttribute('aria-label', t('sync') + ' — ' + when);
+    node.disabled = showBusy;
+    node.setAttribute('aria-label', t('sync') + ' — ' + (syncErrorCode ? t(syncErrorCode) : when));
+    node.classList.toggle('is-error', !!syncErrorCode && !showBusy);
     if (node.id === 'syncChip') node.hidden = !on;
   });
   document.querySelectorAll('.sync-refresh').forEach((node) => {
@@ -4927,6 +5048,9 @@ function showTab(tab) {
   // Tapping the active Insights tab again pops the drill-down back to the overview.
   if (tab === 'insights' && wasOnInsights) analyticsReset();
   refreshAll();
+  // The board is read-only for Shortcut-written records: they live upstream,
+  // so opening a data tab is exactly when we want a fresh pull.
+  if (tab === 'today' || tab === 'calendar' || tab === 'insights') autoSync();
 }
 
 /* Slide the shared Liquid Glass active capsule to the active tab. */
@@ -4970,7 +5094,7 @@ function wireNavigation() {
   document.getElementById('btnAddToday').addEventListener('click', () => openEventSheet(null, { date: todayISO() }));
   document.getElementById('insightsBack').addEventListener('click', analyticsBack);
   document.querySelectorAll('.sync-chip').forEach((btn) => {
-    btn.addEventListener('click', runSync);
+    btn.addEventListener('click', () => runSync());
   });
   // Refresh = reload the app shell (pick up the newest deployed version).
   // Cloud sync stays on the Sync chip only.
@@ -5056,6 +5180,14 @@ async function init() {
   applyStaticTranslations();
   refreshAll();
   setInterval(updateNow, 30000);
+
+  // Opening (or returning to) the app pulls whatever the Shortcut posted while
+  // it was closed.
+  autoSync(true);
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible') autoSync();
+  });
+  window.addEventListener('focus', () => autoSync());
 
   // Position the Liquid Glass active capsule and keep it aligned.
   requestAnimationFrame(moveTabIndicator);
