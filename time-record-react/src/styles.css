@@ -620,70 +620,35 @@ textarea:focus-visible,
   padding: 0 16px;
 }
 
-.tabbar-capsule {
-  position: relative;
+/* ── Glass tab bar (glass-tabs) ──────────────────────────────────────────
+   The capsule is now the TabsList from the glass registry: a solid pill
+   plus the spring-driven liquid lens rendered by the glass engine. The
+   lens refracts whatever is behind the bar (the page scrolls under it),
+   so nothing in this chain may clip or repaint the area around the pill.
+   The halo extends ~40px sideways / 80px vertically beyond the capsule. */
+.tabbar-list {
   pointer-events: auto;
-  display: flex;
-  align-items: center;
-  gap: 2px;
-  padding: 6px;
   width: 100%;
-  max-width: 500px;
-  height: var(--tabbar-h);
-  background: rgba(255, 255, 255, 0.72);
-  -webkit-backdrop-filter: blur(30px) saturate(180%);
-  backdrop-filter: blur(30px) saturate(180%);
-  border: 1px solid rgba(0, 0, 0, 0.06);
-  border-radius: 999px;
   box-shadow:
     0 8px 30px rgba(0, 0, 0, 0.08),
-    0 1px 2px rgba(0, 0, 0, 0.05),
-    inset 0 1px 1px rgba(255, 255, 255, 0.95);
+    0 1px 2px rgba(0, 0, 0, 0.05);
 }
 
-/* Shared Liquid Glass active capsule — slides between tabs. */
-.tabbar-indicator {
-  position: absolute;
-  top: 5px;
-  bottom: 5px;
-  left: 0;
-  width: 0;
-  border-radius: 999px;
-  background: rgba(255, 255, 255, 0.95);
-  border: 1px solid rgba(0, 0, 0, 0.05);
-  box-shadow:
-    0 4px 14px rgba(0, 0, 0, 0.10),
-    0 1px 2px rgba(0, 0, 0, 0.06),
-    inset 0 1px 1px rgba(255, 255, 255, 0.95);
-  transform: translate(0px, -1px);
-  transition:
-    transform 0.45s cubic-bezier(0.22, 1, 0.36, 1),
-    width 0.45s cubic-bezier(0.22, 1, 0.36, 1);
-  will-change: transform, width;
-  z-index: 0;
-}
-
-.tab-item {
-  position: relative;
-  z-index: 1;
+.tabbar-trigger {
   flex: 1 1 0;
   min-width: 0;
-  height: 100%;
-  padding: 0 4px;
-  display: flex;
+  height: 58px;
   flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 2.5px;
-  border-radius: var(--radius-pill);
+  gap: 3px;
+  padding: 8px 4px;
+  font-size: 10.5px;
   color: var(--text-3);
-  transition: color 0.2s ease;
   -webkit-tap-highlight-color: transparent;
 }
-.tab-item svg { width: 21px; height: 21px; }
+.tabbar-trigger svg { width: 21px; height: 21px; }
 .tab-label { font-size: 10.5px; font-weight: 600; letter-spacing: 0.01em; white-space: nowrap; }
-.tab-item.is-active { color: var(--text); }
-.tab-item:active { opacity: 0.6; }
+.tabbar-trigger[data-active] { color: var(--text); }
+.tabbar-trigger:active { opacity: 0.6; }
 
 /* ───────────────────────── Overlay / backdrop ───────────────────────── */
 
@@ -1409,35 +1374,20 @@ textarea.text-input { resize: none; line-height: 1.45; }
 
 /* ───────────────────────── Insights: segments / period ───────────────────────── */
 
-.insights-seg {
-  display: flex;
-  border-bottom: 1px solid var(--divider);
+/* Day / Week / Month / Year — a floating Liquid Glass toggle group
+   (glasscn registry). The old flat underlined segments are gone; the
+   selected option is a spring-animated glass puck inside the capsule. */
+.insights-range {
   margin: 4px 0 16px;
 }
-.seg-btn {
-  flex: 1;
-  position: relative;
-  padding: 12px 4px 11px;
-  font-size: 15px;
+.insights-range-item {
+  height: 40px;
+  padding: 0 12px;
+  font-size: 14px;
   font-weight: 600;
   color: var(--text-3);
-  transition: color 0.15s ease;
-  min-height: 44px;
 }
-.seg-btn.is-active { color: var(--text); }
-.seg-btn::after {
-  content: "";
-  position: absolute;
-  left: 50%;
-  bottom: -1px;
-  transform: translateX(-50%);
-  width: 0;
-  height: 2.5px;
-  border-radius: 999px;
-  background: var(--accent);
-  transition: width 0.18s var(--ease-out);
-}
-.seg-btn.is-active::after { width: 22px; }
+.insights-range-item[data-checked] { color: var(--text); }
 
 .insights-period {
   display: flex;

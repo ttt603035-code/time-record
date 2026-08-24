@@ -24,6 +24,23 @@ const { window } = dom;
 window.requestAnimationFrame = (cb)=>window.setTimeout(()=>cb(Date.now()),0);
 window.scrollTo=()=>{}; window.HTMLElement.prototype.scrollTo=function(){};
 window.matchMedia = window.matchMedia || (()=>({matches:false,addEventListener(){},removeEventListener(){},addListener(){},removeListener(){}}));
+// The glass components (glass-tabs / liquid-glass) observe their own size;
+// jsdom has no ResizeObserver, so give them a no-op (initial measurement is
+// done imperatively on mount, so no observation is needed for the tests).
+window.ResizeObserver = window.ResizeObserver || class {
+    constructor(cb) { this._cb = cb; }
+    // jsdom has no layout engine, so getBoundingClientRect is always 0x0. A
+    // naive no-op observer would leave ResizeObserver consumers (Recharts' ResponsiveContainer)
+    // at 0x0 and they would render nothing; report the element size when it
+    // is real and a default dimension otherwise.
+    observe(el) {
+      const r = el && el.getBoundingClientRect ? el.getBoundingClientRect() : {};
+      const w = r.width > 0 ? r.width : 320;
+      const h = r.height > 0 ? r.height : 200;
+      Promise.resolve().then(() => { this._cb([{ contentRect: { width: w, height: h }, target: el }], this); }).catch(() => {});
+    }
+    unobserve() {} disconnect() {}
+  };
 const sc = window.document.createElement('script');
 sc.textContent = appJs;
 window.document.body.appendChild(sc);

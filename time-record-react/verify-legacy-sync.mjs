@@ -24,6 +24,7 @@ window.HTMLElement.prototype.scrollTo = function(o){ if(o&&typeof o.top==='numbe
 window.Element.prototype.setPointerCapture = () => {};
 window.Element.prototype.releasePointerCapture = () => {};
 window.matchMedia = window.matchMedia || (() => ({matches:false,addEventListener(){},removeEventListener(){},addListener(){},removeListener(){}}));
+
 window.URL.createObjectURL = () => 'blob:stub';
 
 const s = window.document.createElement('script');

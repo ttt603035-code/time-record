@@ -67,6 +67,23 @@ async function boot({ url = 'https://example.test/time-record/', storage = null 
     matches: false, addEventListener() {}, removeEventListener() {},
     addListener() {}, removeListener() {},
   }));
+  // The glass components (glass-tabs / liquid-glass) and Recharts both need a
+  // ResizeObserver, which jsdom does not provide. The shim below satisfies both
+  // (see the class comment for why it reports a real size).
+  window.ResizeObserver = window.ResizeObserver || class {
+    constructor(cb) { this._cb = cb; }
+    // jsdom has no layout engine, so getBoundingClientRect is always 0x0. A
+    // naive no-op observer would leave ResizeObserver consumers (Recharts' ResponsiveContainer)
+    // at 0x0 and they would render nothing; report the element size when it
+    // is real and a default dimension otherwise.
+    observe(el) {
+      const r = el && el.getBoundingClientRect ? el.getBoundingClientRect() : {};
+      const w = r.width > 0 ? r.width : 320;
+      const h = r.height > 0 ? r.height : 200;
+      Promise.resolve().then(() => { this._cb([{ contentRect: { width: w, height: h }, target: el }], this); }).catch(() => {});
+    }
+    unobserve() {} disconnect() {}
+  };
   window.URL.createObjectURL = () => 'blob:stub';
   window.URL.revokeObjectURL = () => {};
 
@@ -133,7 +150,7 @@ check('42-cell Monday-first grid', $$(doc, '#calendarGrid .day').length === 42,
   `${$$(doc, '#calendarGrid .day').length} cells`);
 check('Weekday header starts Mon',
   $(doc, '#weekdayHeader span')?.textContent === 'Mon');
-check('Bottom tab bar with 4 tabs', $$(doc, '.tab-item').length === 4);
+check('Bottom tab bar with 4 tabs', $$(doc, '.tabbar-trigger').length === 4);
 check('Month title rendered', !!$(doc, '#monthTitleText')?.textContent);
 check('Day detail list rendered', !!$(doc, '#eventsList'));
 
@@ -166,7 +183,7 @@ check('Default templates seeded', cats.length === 6);
 check('Event dots painted on grid', $$(doc, '#calendarGrid .day-dots i').length > 0);
 
 /* ══════════════ 2. TODAY ══════════════ */
-clickEl(window, $(doc, '.tab-item[data-tab="today"]'));
+clickEl(window, $(doc, '.tabbar-trigger[data-tab="today"]'));
 await tick(500);
 check('Today screen mounts', !!$(doc, '#screen-today'));
 check('Today date heading', !!$(doc, '#todayDate')?.textContent);
@@ -177,20 +194,20 @@ check('Timeline "now" line drawn', $$(doc, '.timeline-now').length === 1);
 check('Timeline hour gridlines', $$(doc, '.timeline-hour').length === 25);
 
 /* ══════════════ 3. INSIGHTS ══════════════ */
-clickEl(window, $(doc, '.tab-item[data-tab="insights"]'));
+clickEl(window, $(doc, '.tabbar-trigger[data-tab="insights"]'));
 await tick(500);
 check('Insights screen mounts', !!$(doc, '#screen-insights'));
-check('Four range segments', $$(doc, '.seg-btn').length === 4);
-check('Day is the default range', $(doc, '.seg-btn.is-active')?.textContent === 'Day');
+check('Four range segments', $$(doc, '.insights-range-item').length === 4);
+check('Day is the default range', $(doc, '.insights-range-item[data-checked]')?.textContent === 'Day');
 check('Hero total rendered', !!$(doc, '.hero-value')?.textContent);
 check('Day range shows the time-block timeline', $$(doc, '.timeline').length > 0);
 check('Period selector rendered', !!$(doc, '.period-label'));
 
 // Switch to Month for a richer dataset.
-const monthSeg = $$(doc, '.seg-btn').find((b) => b.textContent === 'Month');
+const monthSeg = $$(doc, '.insights-range-item').find((b) => b.textContent === 'Month');
 clickEl(window, monthSeg);
 await tick(600);
-check('Month range activates', $(doc, '.seg-btn.is-active')?.textContent === 'Month');
+check('Month range activates', $(doc, '.insights-range-item[data-checked]')?.textContent === 'Month');
 // Phase 2: the donut is a shadcn Chart (Recharts). Segments are sector paths
 // with their own role/aria-label rather than the old hit-area circles.
 check('Donut segments drawn', $$(doc, '.donut-svg path[role="button"]').length > 0,
@@ -297,7 +314,7 @@ await tick(450);
 check('Period picker sheet closes', $$(doc, '[data-slot="sheet-content"]').length === 0);
 
 /* ══════════════ 4. MORE ══════════════ */
-clickEl(window, $(doc, '.tab-item[data-tab="more"]'));
+clickEl(window, $(doc, '.tabbar-trigger[data-tab="more"]'));
 await tick(500);
 check('More screen mounts', !!$(doc, '#screen-more'));
 // Phase 2: the More screen is React + shadcn (Card / Separator / Collapsible),
@@ -456,7 +473,7 @@ clickEl(window, $(doc, '.study-modal-close'));
 await tick(450);
 
 /* ══════════════ 5. EVENT CRUD ══════════════ */
-clickEl(window, $(doc, '.tab-item[data-tab="calendar"]'));
+clickEl(window, $(doc, '.tabbar-trigger[data-tab="calendar"]'));
 await tick(500);
 const countBefore = JSON.parse(window.localStorage.getItem('calendar_events_v1')).events.length;
 
@@ -607,7 +624,7 @@ check('Sheet: picking a month closes it and applies the choice',
   `${titleBeforePick} → ${$(doc, '#monthTitleText').textContent}`);
 
 /* ══════════════ 7. I18N ══════════════ */
-clickEl(window, $(doc, '.tab-item[data-tab="more"]'));
+clickEl(window, $(doc, '.tabbar-trigger[data-tab="more"]'));
 await tick(500);
 // Language buttons are shadcn Buttons in the Language card now.
 const langBtn = (label) => $$(doc, '[data-slot="button"]')
@@ -617,7 +634,7 @@ clickEl(window, zhBtn);
 await tick(700);
 check('UI switches to 中文', $(doc, '#screen-more .page-title')?.textContent === '更多');
 check('Tab labels translated',
-  $(doc, '.tab-item[data-tab="calendar"] .tab-label')?.textContent === '日历');
+  $(doc, '.tabbar-trigger[data-tab="calendar"] .tab-label')?.textContent === '日历');
 const settings = JSON.parse(window.localStorage.getItem('calendar_settings_v1'));
 check('Language persisted in calendar_settings_v1', settings.lang === 'zh', JSON.stringify(settings));
 check('<html lang> updated', doc.documentElement.lang === 'zh-CN');
@@ -751,9 +768,9 @@ check('Shortcut URL: re-importing a stable id updates instead of duplicating',
   && dedupList.find((e) => e.id === stableId).title === 'Envelope Import UPDATED');
 
 // Imported records feed Analytics.
-clickEl(window, $(doc, '.tab-item[data-tab="insights"]'));
+clickEl(window, $(doc, '.tabbar-trigger[data-tab="insights"]'));
 await tick(500);
-clickEl(window, $$(doc, '.seg-btn')[3]); // Year
+clickEl(window, $$(doc, '.insights-range-item')[3]); // Year
 await tick(700);
 check('Analytics derives live from the imported Time Record',
   $$(doc, '.rank-row').length > 0, `${$$(doc, '.rank-row').length} categories`);
@@ -901,8 +918,18 @@ check('CSS: legacy design tokens intact',
 const legacyCss = readFileSync('../styles.css', 'utf8');
 const migratedCss = readFileSync('src/styles.css', 'utf8');
 const legacySelectors = [...legacyCss.matchAll(/^\.([\w-]+)/gm)].map((m) => m[1]);
+// Intentionally replaced — the glass components (websiteglass glass-tabs and
+// the @glasscn registry) own these two controls now, so the hand-rolled
+// styles went with the old markup. Anything else that goes missing is a bug.
+const intentionallyReplaced = new Set([
+  'tabbar-capsule',    // glass TabsList capsule (src/components/ui/glass-tabs.jsx)
+  'tabbar-indicator',  // the glass engine's spring lens replaces this capsule
+  'tab-item',          // glass TabsTrigger (.tabbar-trigger)
+  'insights-seg',      // GlassToggleGroup capsule (.insights-range-group)
+  'seg-btn',           // GlassToggleGroupItem (.insights-range-item)
+]);
 const missingSelectors = [...new Set(legacySelectors)]
-  .filter((name) => !migratedCss.includes(`.${name}`));
+  .filter((name) => !intentionallyReplaced.has(name) && !migratedCss.includes(`.${name}`));
 check('No legacy CSS class silently dropped',
   missingSelectors.length === 0,
   missingSelectors.length ? `missing: ${missingSelectors.join(', ')}` : `${new Set(legacySelectors).size} classes kept`);
