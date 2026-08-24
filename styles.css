@@ -1415,14 +1415,13 @@ textarea.text-input { resize: none; line-height: 1.45; }
 /* ───────────────────────── Insights: segments / period ───────────────────────── */
 
 /* Day / Week / Month / Year — a floating Liquid Glass capsule
-   (glass-ui.js). The selected option is a spring-animated glass puck
-   (#insightsPuck) instead of the old flat underline. */
+   (glass-ui.js). The frosted look lives on the WRAPPER so the glass puck
+   (#insightsPuck, between the wrapper's background and the z-1 buttons)
+   paints above the frost and below the labels. The selected option is a
+   spring-animated glass puck instead of the old flat underline. */
 .insights-seg-wrap {
   position: relative;
   margin: 4px 0 16px;
-}
-.insights-seg {
-  display: flex;
   padding: 4px;
   border-radius: 999px;
   background: rgba(255, 255, 255, 0.55);
@@ -1432,6 +1431,9 @@ textarea.text-input { resize: none; line-height: 1.45; }
   box-shadow:
     0 2px 10px rgba(0, 0, 0, 0.05),
     inset 0 1px 1px rgba(255, 255, 255, 0.9);
+}
+.insights-seg {
+  display: flex;
 }
 .glass-puck {
   position: absolute;

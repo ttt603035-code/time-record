@@ -277,7 +277,7 @@
         (geometry + springs from glass-tabs' TabsList)
      ══════════════════════════════════════════════════════════════ */
 
-  const INDICATOR_SPRING = { stiffness: 50, damping: 13 };
+  const INDICATOR_SPRING = { stiffness: 400, damping: 30 };
   const DEFORM_SPRING = { stiffness: 66, damping: 9 };
   const VELOCITY_SCALE = 0.134;
   const DEFORM_CLAMP = 0.3;
@@ -289,6 +289,9 @@
     const capsule = document.querySelector('.tabbar-capsule');
     const droplet = document.getElementById('tabIndicator');
     if (!capsule || !droplet) return;
+
+    // Cached so the per-frame deform target never forces a layout read.
+    let capsuleW = capsule.getBoundingClientRect().width || 1;
 
     const part = makeFilter('glass-tabbar');
     if (part) {
@@ -336,8 +339,7 @@
     const deformDriver = new SpringDriver(
       deform, DEFORM_SPRING,
       () => {
-        const width = capsule.getBoundingClientRect().width;
-        const vNorm = Math.abs(cx.getVelocity()) / Math.max(width, 1);
+        const vNorm = Math.abs(cx.getVelocity()) / Math.max(capsuleW, 1);
         return Math.min(DEFORM_CLAMP, Math.sqrt(vNorm) * VELOCITY_SCALE);
       },
       () => Math.abs(cx.getVelocity()) < 0.005);
@@ -349,6 +351,7 @@
       const active = capsule.querySelector('.tab-item.is-active');
       if (!active) return;
       const cRect = capsule.getBoundingClientRect();
+      if (cRect.width) capsuleW = cRect.width;
       const r = active.getBoundingClientRect();
       if (!r.width) return; // hidden screen
       targets.cx = r.left - cRect.left + r.width / 2;
@@ -406,11 +409,18 @@
     if (!host) return;
     const puck = document.getElementById('insightsPuck');
     if (!puck) return;
+    // The frosted capsule (background + backdrop-filter + border) is the
+    // wrapper — .insights-seg itself stays transparent. The puck is the
+    // wrapper's first child, so it paints above the frost and below the
+    // z-1 buttons.
+    const wrap = puck.parentElement && puck.parentElement.classList.contains('insights-seg-wrap')
+      ? puck.parentElement
+      : host;
 
     const part = makeFilter('glass-range');
     if (part) {
-      host.style.backdropFilter = 'url(#glass-range) blur(18px) saturate(1.5)';
-      host.style.webkitBackdropFilter = 'url(#glass-range) blur(18px) saturate(1.5)';
+      wrap.style.backdropFilter = 'url(#glass-range) blur(18px) saturate(1.5)';
+      wrap.style.webkitBackdropFilter = 'url(#glass-range) blur(18px) saturate(1.5)';
     }
 
     const left = new MotionValue(0);
@@ -456,10 +466,10 @@
     function measure(animate) {
       const active = host.querySelector('.seg-btn.is-active');
       if (!active) return;
-      const hRect = host.getBoundingClientRect();
+      const wRect = wrap.getBoundingClientRect();
       const r = active.getBoundingClientRect();
       if (!r.width) return; // hidden screen
-      const l = r.left - hRect.left;
+      const l = r.left - wRect.left;
       const w = r.width;
       if (!initialized || !animate || prefersReducedMotion()) {
         initialized = true;
@@ -480,10 +490,10 @@
         updateFilter(part, host);
         measure(false);
       });
-      ro.observe(host);
+      ro.observe(wrap);
     } else {
       window.addEventListener('resize', () => {
-        updateFilter(part, host);
+        updateFilter(part, wrap);
         measure(false);
       });
     }
@@ -492,7 +502,7 @@
     // .is-active on mode change — watch both.
     const mo = new MutationObserver(() => {
       if (host.children.length) {
-        updateFilter(part, host);
+        updateFilter(part, wrap);
         measure(true);
       }
     });
@@ -504,7 +514,7 @@
     });
 
     if (host.children.length) {
-      updateFilter(part, host);
+      updateFilter(part, wrap);
       measure(false);
     }
   }
