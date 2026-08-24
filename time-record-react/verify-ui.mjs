@@ -21,6 +21,23 @@ async function boot(storage=null){
   window.Element.prototype.setPointerCapture=()=>{}; window.Element.prototype.releasePointerCapture=()=>{};
   window.Element.prototype.hasPointerCapture=()=>false;
   window.matchMedia=window.matchMedia||(()=>({matches:false,addEventListener(){},removeEventListener(){},addListener(){},removeListener(){}}));
+  // The glass components (glass-tabs / liquid-glass) and Recharts both need a
+  // ResizeObserver, which jsdom does not provide. The shim below satisfies both
+  // (see the class comment for why it reports a real size).
+  window.ResizeObserver = window.ResizeObserver || class {
+    constructor(cb) { this._cb = cb; }
+    // jsdom has no layout engine, so getBoundingClientRect is always 0x0. A
+    // naive no-op observer would leave ResizeObserver consumers (Recharts' ResponsiveContainer)
+    // at 0x0 and they would render nothing; report the element size when it
+    // is real and a default dimension otherwise.
+    observe(el) {
+      const r = el && el.getBoundingClientRect ? el.getBoundingClientRect() : {};
+      const w = r.width > 0 ? r.width : 320;
+      const h = r.height > 0 ? r.height : 200;
+      Promise.resolve().then(() => { this._cb([{ contentRect: { width: w, height: h }, target: el }], this); }).catch(() => {});
+    }
+    unobserve() {} disconnect() {}
+  };
   window.URL.createObjectURL=()=>'blob:stub'; window.URL.revokeObjectURL=()=>{};
   if(storage) for(const [k,v] of Object.entries(storage)) window.localStorage.setItem(k,v);
   const s=window.document.createElement('script'); s.textContent=bundle; window.document.body.appendChild(s);
@@ -33,7 +50,7 @@ const w = await boot();
 const doc = w.document;
 
 // ── Tab icons ──
-const tabs = [...doc.querySelectorAll('.tab-item')];
+const tabs = [...doc.querySelectorAll('.tabbar-trigger')];
 check('Four tabs render', tabs.length===4, `${tabs.length}`);
 const calSvg = tabs[0].querySelector('svg');
 const insSvg = tabs[2].querySelector('svg');
@@ -49,7 +66,7 @@ check('No sizing classes added to tab icons',
   !(calSvg?.getAttribute('class')||'').match(/\bsize-\d|\bw-\d/), calSvg?.getAttribute('class'));
 
 // ── Donut geometry restored ──
-click(w, doc.querySelector('.tab-item[data-tab="insights"]'));
+click(w, doc.querySelector('.tabbar-trigger[data-tab="insights"]'));
 await new Promise(r=>setTimeout(r,900));
 const donut = doc.querySelector('.donut-svg');
 check('Insights renders a donut', !!donut);
@@ -65,7 +82,7 @@ if (paths.length) {
 }
 
 // ── Sync chip: hidden when sync is off ──
-click(w, doc.querySelector('.tab-item[data-tab="more"]'));
+click(w, doc.querySelector('.tabbar-trigger[data-tab="more"]'));
 await new Promise(r=>setTimeout(r,600));
 const topbar = doc.querySelector('#screen-more .topbar');
 check('More topbar renders', !!topbar);
@@ -75,7 +92,7 @@ check('No sync chip when sync is off', !topbar.querySelector('button'));
 const cfg = JSON.stringify({url:'https://demo.supabase.co',anonKey:'eyJk',userKey:'p'});
 const tenMinAgo = new Date(Date.now()-10*60000).toISOString();
 const w2 = await boot({calendar_sync_v1:cfg, calendar_sync_at_v1:tenMinAgo});
-click(w2, w2.document.querySelector('.tab-item[data-tab="more"]'));
+click(w2, w2.document.querySelector('.tabbar-trigger[data-tab="more"]'));
 await new Promise(r=>setTimeout(r,600));
 const chip = w2.document.querySelector('#screen-more .topbar button');
 check('Sync chip appears when configured', !!chip);
@@ -92,12 +109,16 @@ check('Refresh icon is lucide refresh-cw',
 
 // timestamp survives a reload
 const w3 = await boot({calendar_sync_v1:cfg, calendar_sync_at_v1:tenMinAgo});
-click(w3, w3.document.querySelector('.tab-item[data-tab="more"]'));
+click(w3, w3.document.querySelector('.tabbar-trigger[data-tab="more"]'));
 await new Promise(r=>setTimeout(r,600));
 check('Timestamp persists across a reload',
   /10 min ago/.test(w3.document.querySelector('#screen-more .topbar button')?.textContent||''));
 
-check('No runtime errors', errors.length===0, errors.slice(0,2).join(' | '));
+// jsdom cannot implement canvas (the glass engine probes it with a 1x1
+// toDataURL); those "Not implemented" notes are environment limits, not app
+// errors — same filter the phase-1 harness uses.
+const realErrors = errors.filter((e) => !/Not implemented|Could not parse CSS/i.test(e));
+check('No runtime errors', realErrors.length===0, realErrors.slice(0,2).join(' | '));
 
 const p=results.filter(Boolean).length;
 console.log(`\n${p}/${results.length} 通过`);

@@ -173,6 +173,31 @@ Add more with `npx shadcn@latest add <component>`.
 Per the phase-1 brief, **no existing UI was rewritten to use shadcn.** That is
 phase 2.
 
+Two liquid-glass controls from third-party registries are in:
+
+- **glass-tabs** (websiteglass.com) — `components/ui/glass*.jsx` plus the
+  glass engine (`glass.jsx`, `glass-webgl.js`, `glass-motion.js`,
+  `glass-surface.jsx`). The bottom tab bar is a `TabsList`: the white capsule
+  behind the active tab glides with spring physics and deforms like a droplet
+  while travelling, and the lens refracts the page scrolling underneath.
+  Install source: `npx shadcn@latest add https://websiteglass.com/r/glass-tabs.json`
+  (pulls its `glass.json` dependency with it).
+- **glass-toggle-group** (`@glasscn` registry, glasscn.vercel.app) —
+  `components/ui/glasscn/{liquid-glass,glass-toggle-group}.jsx` +
+  `components/ui/radio-group.jsx`. The Insights Day/Week/Month/Year range is
+  now a frosted capsule with a spring-animated glass puck.
+  Install source: `npx shadcn@latest add @glasscn/glass-toggle-group`.
+
+The registry hosts are not reachable from every network (and the glasscn
+deployment's `/r/*.json` was 404ing), so if a re-install fails, the files are
+already committed — no registry access is needed to build or run.
+
+Tailwind note: both registries are authored for Tailwind v4; this project is
+v3. The v4-only utilities they use are covered by the shims in
+`tailwind.config.js` (same approach as the earlier shadcn v4 components), and
+the glass engine animates via imperative `style` writes, so it does not depend
+on v4's `translate`/`scale` property compilation.
+
 ### shadcn Skills (AI assistant context)
 
 `npx skills add shadcn/ui` is installed, so an AI assistant working in this repo

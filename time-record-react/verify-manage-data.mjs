@@ -42,6 +42,23 @@ function makeDom() {
   window.Element.prototype.setPointerCapture = () => {};
   window.Element.prototype.releasePointerCapture = () => {};
   window.matchMedia = window.matchMedia || (() => ({ matches: false, addEventListener() {}, removeEventListener() {}, addListener() {}, removeListener() {} }));
+  // The glass components (glass-tabs / liquid-glass) and Recharts both need a
+  // ResizeObserver, which jsdom does not provide. The shim below satisfies both
+  // (see the class comment for why it reports a real size).
+  window.ResizeObserver = window.ResizeObserver || class {
+    constructor(cb) { this._cb = cb; }
+    // jsdom has no layout engine, so getBoundingClientRect is always 0x0. A
+    // naive no-op observer would leave ResizeObserver consumers (Recharts' ResponsiveContainer)
+    // at 0x0 and they would render nothing; report the element size when it
+    // is real and a default dimension otherwise.
+    observe(el) {
+      const r = el && el.getBoundingClientRect ? el.getBoundingClientRect() : {};
+      const w = r.width > 0 ? r.width : 320;
+      const h = r.height > 0 ? r.height : 200;
+      Promise.resolve().then(() => { this._cb([{ contentRect: { width: w, height: h }, target: el }], this); }).catch(() => {});
+    }
+    unobserve() {} disconnect() {}
+  };
   window.URL.createObjectURL = () => 'blob:stub';
   const s = window.document.createElement('script');
   s.textContent = appJs;
