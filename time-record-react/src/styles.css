@@ -626,6 +626,13 @@ textarea:focus-visible,
    lens refracts whatever is behind the bar (the page scrolls under it),
    so nothing in this chain may clip or repaint the area around the pill.
    The halo extends ~40px sideways / 80px vertically beyond the capsule. */
+/* The capsule spans exactly the content column below (the .app max-width
+   minus the 16px side padding on each side), so the bar lines up with the
+   screens above it instead of floating narrower in the middle. */
+.tabbar-tabs {
+  max-width: calc(var(--content-max) - 32px);
+}
+
 .tabbar-list {
   pointer-events: auto;
   width: 100%;

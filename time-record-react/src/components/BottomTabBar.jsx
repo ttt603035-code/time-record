@@ -59,7 +59,7 @@ const TABS = [
 export function BottomTabBar({ tab, onSelect, lang }) {
   return (
     <nav className="tabbar" aria-label="Primary">
-      <Tabs value={tab} onValueChange={onSelect} className="tabbar-tabs w-full max-w-[500px]">
+      <Tabs value={tab} onValueChange={onSelect} className="tabbar-tabs w-full">
         <TabsList className="tabbar-list" tint={0.35}>
           {TABS.map(({ id, icon }) => (
             <TabsTrigger
