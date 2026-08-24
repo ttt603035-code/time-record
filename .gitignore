@@ -1,0 +1,3 @@
+
+# local tooling (glass-smoke.mjs runs jsdom from the React workspace)
+node_modules
