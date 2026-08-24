@@ -119,7 +119,10 @@
         <div class="insights-nav-title" id="insightsNavTitle"></div>
       </nav>
 
-      <div class="insights-seg" id="insightsSeg" role="tablist"></div>
+      <div class="insights-seg-wrap">
+        <span class="glass-puck" id="insightsPuck" aria-hidden="true"></span>
+        <div class="insights-seg" id="insightsSeg" role="tablist"></div>
+      </div>
       <div class="insights-period" id="insightsPeriod"></div>
       <div class="insights-body" id="insightsBody"></div>
     </main>
@@ -171,5 +174,6 @@
   <input type="file" id="importFile" accept="application/json,.json" hidden />
 
   <script src="app.js?v=20260822c"></script>
+  <script src="glass-ui.js?v=20260824a"></script>
 </body>
 </html>

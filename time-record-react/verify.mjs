@@ -928,8 +928,18 @@ const intentionallyReplaced = new Set([
   'insights-seg',      // GlassToggleGroup capsule (.insights-range-group)
   'seg-btn',           // GlassToggleGroupItem (.insights-range-item)
 ]);
+// Added to the LEGACY stylesheet only (glass-ui.js port for the root app) —
+// the legacy→migrated contract only covers classes that existed at the
+// legacy baseline, so new legacy-only names are expected to be absent here.
+const legacyOnlyAdditions = new Set([
+  'insights-seg-wrap', // wrapper hosting the glass puck
+  'glass-puck',        // spring-animated glass puck (legacy app only)
+]);
 const missingSelectors = [...new Set(legacySelectors)]
-  .filter((name) => !intentionallyReplaced.has(name) && !migratedCss.includes(`.${name}`));
+  .filter((name) =>
+    !intentionallyReplaced.has(name)
+    && !legacyOnlyAdditions.has(name)
+    && !migratedCss.includes(`.${name}`));
 check('No legacy CSS class silently dropped',
   missingSelectors.length === 0,
   missingSelectors.length ? `missing: ${missingSelectors.join(', ')}` : `${new Set(legacySelectors).size} classes kept`);

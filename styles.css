@@ -645,12 +645,15 @@ textarea:focus-visible,
 }
 
 /* Shared Liquid Glass active capsule — slides between tabs. */
+/* Liquid Glass droplet (glass-ui.js). Positioned every frame with spring
+   physics — no CSS transition; the droplet deforms like a water drop while
+   travelling. Without JS it simply stays 0-wide and invisible. */
 .tabbar-indicator {
   position: absolute;
-  top: 5px;
-  bottom: 5px;
+  top: 0;
   left: 0;
   width: 0;
+  height: 0;
   border-radius: 999px;
   background: rgba(255, 255, 255, 0.95);
   border: 1px solid rgba(0, 0, 0, 0.05);
@@ -658,11 +661,7 @@ textarea:focus-visible,
     0 4px 14px rgba(0, 0, 0, 0.10),
     0 1px 2px rgba(0, 0, 0, 0.06),
     inset 0 1px 1px rgba(255, 255, 255, 0.95);
-  transform: translate(0px, -1px);
-  transition:
-    transform 0.45s cubic-bezier(0.22, 1, 0.36, 1),
-    width 0.45s cubic-bezier(0.22, 1, 0.36, 1);
-  will-change: transform, width;
+  will-change: left, top, width, height;
   z-index: 0;
 }
 
@@ -1412,35 +1411,62 @@ textarea.text-input { resize: none; line-height: 1.45; }
 
 /* ───────────────────────── Insights: segments / period ───────────────────────── */
 
+/* Day / Week / Month / Year — a floating Liquid Glass capsule
+   (glass-ui.js). The selected option is a spring-animated glass puck
+   (#insightsPuck) instead of the old flat underline. */
+.insights-seg-wrap {
+  position: relative;
+  margin: 4px 0 16px;
+}
 .insights-seg {
   display: flex;
-  border-bottom: 1px solid var(--divider);
-  margin: 4px 0 16px;
+  padding: 4px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.55);
+  -webkit-backdrop-filter: blur(18px) saturate(150%);
+  backdrop-filter: blur(18px) saturate(150%);
+  border: 1px solid rgba(0, 0, 0, 0.05);
+  box-shadow:
+    0 2px 10px rgba(0, 0, 0, 0.05),
+    inset 0 1px 1px rgba(255, 255, 255, 0.9);
+}
+.glass-puck {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 0;
+  height: 100%;
+  border-radius: 999px;
+  background: linear-gradient(to bottom, rgba(255, 255, 255, 0.50), rgba(255, 255, 255, 0.30));
+  border: 1px solid rgba(255, 255, 255, 0.40);
+  box-shadow:
+    0 -1px 2px rgba(255, 255, 255, 0.8),
+    0 1px 1px rgba(0, 0, 0, 0.08),
+    0 2px 4px rgba(0, 0, 0, 0.1),
+    0 4px 8px rgba(0, 0, 0, 0.1),
+    0 8px 16px rgba(0, 0, 0, 0.08),
+    inset 0 1px 1px rgba(255, 255, 255, 0.9),
+    inset 0 -1px 1px rgba(0, 0, 0, 0.05);
+  transform-origin: center;
+  will-change: left, width, transform;
+  pointer-events: none;
+  z-index: 0;
+  opacity: 0;
 }
 .seg-btn {
   flex: 1;
   position: relative;
-  padding: 12px 4px 11px;
+  z-index: 1;
+  padding: 0 12px;
+  min-height: 40px;
+  border-radius: 999px;
   font-size: 15px;
   font-weight: 600;
   color: var(--text-3);
   transition: color 0.15s ease;
-  min-height: 44px;
+  -webkit-tap-highlight-color: transparent;
 }
 .seg-btn.is-active { color: var(--text); }
-.seg-btn::after {
-  content: "";
-  position: absolute;
-  left: 50%;
-  bottom: -1px;
-  transform: translateX(-50%);
-  width: 0;
-  height: 2.5px;
-  border-radius: 999px;
-  background: var(--accent);
-  transition: width 0.18s var(--ease-out);
-}
-.seg-btn.is-active::after { width: 22px; }
 
 .insights-period {
   display: flex;

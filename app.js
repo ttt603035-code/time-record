@@ -5307,8 +5307,11 @@ function showTab(tab) {
   if (tab === 'today' || tab === 'calendar' || tab === 'insights') autoSync();
 }
 
-/* Slide the shared Liquid Glass active capsule to the active tab. */
+/* Slide the shared Liquid Glass active capsule to the active tab.
+   When glass-ui.js has adopted the indicator it drives it with spring
+   physics instead — skip the legacy transform math in that case. */
 function moveTabIndicator() {
+  if (window.GlassUI && window.GlassUI.active) return;
   const indicator = document.getElementById('tabIndicator');
   if (!indicator) return;
   const active = document.querySelector('.tabbar-capsule .tab-item.is-active');
