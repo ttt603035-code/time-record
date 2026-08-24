@@ -631,7 +631,10 @@ textarea:focus-visible,
   gap: 2px;
   padding: 6px;
   width: 100%;
-  max-width: 500px;
+  /* span the same column as the screens above (content max minus the 16px
+     side padding on each side), so the four tabs get the full width and
+     line up with the content instead of sitting in a narrow pill. */
+  max-width: calc(var(--content-max) - 32px);
   height: var(--tabbar-h);
   background: rgba(255, 255, 255, 0.72);
   -webkit-backdrop-filter: blur(30px) saturate(180%);
